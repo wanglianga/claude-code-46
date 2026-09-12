@@ -1,0 +1,8 @@
+services:
+  app:
+    build: .
+    container_name: ${COMPOSE_PROJECT_NAME:-kidfit}-app
+    ports:
+      # 仅把应用端口发布到宿主；内部固定 8080
+      - "${CC_PUBLISH_PORT:-3001}:8080"
+    restart: unless-stopped
