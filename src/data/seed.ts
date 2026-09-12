@@ -3,6 +3,7 @@ import {
   ClassCourse,
   DesignDecision,
   Incident,
+  Interception,
   Session,
   Student,
   TimelineEvent,
@@ -16,9 +17,16 @@ export interface SeedData {
   classes: ClassCourse[];
   sessions: Session[];
   incidents: Incident[];
+  interceptions: Interception[];
   assessments: Assessment[];
   timeline: TimelineEvent[];
   designDecisions: DesignDecision[];
+}
+
+/** 本周内的日期（周一为一周起点；n 为期望的几天前，超出本周则收敛到本周一） */
+function thisWeek(n: number): string {
+  const dow = (new Date().getDay() + 6) % 7; // 周一 = 0
+  return daysAgo(Math.min(n, dow));
 }
 
 export function buildSeed(): SeedData {
@@ -64,7 +72,7 @@ export function buildSeed(): SeedData {
       height: 106, weight: 17.5, sportsHistory: '无系统训练经历，平时喜欢骑平衡车',
       allergies: ['花粉'], pastInjuries: [], parentExpectation: '提升专注力，为上小学做准备',
       parentId: 'u-p-chen', classId: 'c-qimeng',
-      pkg: { name: '48 课时成长包', total: 48, used: 9, expires: daysAgo(-180) },
+      pkg: { name: '48 课时成长包', total: 48, used: 10, expires: daysAgo(-180) },
       createdAt: daysAgo(75),
     },
     {
@@ -104,7 +112,7 @@ export function buildSeed(): SeedData {
       height: 112, weight: 19.5, sportsHistory: '无',
       allergies: [], pastInjuries: ['3 岁时滑梯磕碰额头缝 2 针'], parentExpectation: '释放精力，晚上睡得好',
       parentId: 'u-p-wu', classId: 'c-qimeng',
-      pkg: { name: '24 课时体验包', total: 24, used: 20, expires: daysAgo(-30) },
+      pkg: { name: '24 课时体验包', total: 24, used: 21, expires: daysAgo(-30) },
       createdAt: daysAgo(60),
     },
     {
@@ -225,9 +233,33 @@ export function buildSeed(): SeedData {
         }),
       ],
     },
-    // 已完成的课次（基础 B）
+    // 本周已完成的课次（启蒙 A，周二）——孙甜甜课前被拦截
     {
-      id: 'se-jc-1', classId: 'c-jichu', date: daysAgo(5), time: '15:00', coachId: 'u-coach', status: 'done',
+      id: 'se-qm-2', classId: 'c-qimeng', date: thisWeek(4), time: '10:00', coachId: 'u-coach', status: 'done',
+      records: [
+        mkRecord('s-chenchen', {
+          performance: { warmup: 'good', jump: 'good', crawl: 'excellent', throw: 'good', balanceBeam: 'good', teamGame: 'good' },
+          performanceNote: '平衡木可独立走半程，注意力比上周集中。',
+          caution: '平衡木末端仍需口头提醒看前方。',
+          homeExercise: '地板直线行走 + 单脚站立挑战，每侧 20 秒',
+          levelUpAdvice: '继续保持', reportAcked: true,
+        }),
+        mkRecord('s-suntiantian', {
+          intercepted: true,
+          checklist: { signed: true, equipment: true, healthOk: false, parentAuth: true, note: '到店时咳嗽明显，前台拦截' },
+        }),
+        mkRecord('s-wutiantian', {
+          performance: { warmup: 'excellent', jump: 'good', crawl: 'excellent', throw: 'good', balanceBeam: 'good', teamGame: 'good' },
+          performanceNote: '团队游戏能等待轮流，规则意识有进步。',
+          caution: '无',
+          homeExercise: '家庭接力小游戏，练习轮流与规则意识',
+          levelUpAdvice: '继续保持', reportAcked: true,
+        }),
+      ],
+    },
+    // 已完成的课次（基础 B，本周一）
+    {
+      id: 'se-jc-1', classId: 'c-jichu', date: thisWeek(5), time: '15:00', coachId: 'u-coach', status: 'done',
       records: [
         mkRecord('s-zhaoxiaohu', {
           performance: { warmup: 'good', jump: 'good', crawl: 'good', throw: 'attention', balanceBeam: 'excellent', teamGame: 'good' },
@@ -252,9 +284,9 @@ export function buildSeed(): SeedData {
         }),
       ],
     },
-    // 已完成的课次（进阶 C）
+    // 已完成的课次（进阶 C，本周三）
     {
-      id: 'se-jj-1', classId: 'c-jinjie', date: daysAgo(3), time: '16:30', coachId: 'u-coach2', status: 'done',
+      id: 'se-jj-1', classId: 'c-jinjie', date: thisWeek(3), time: '16:30', coachId: 'u-coach2', status: 'done',
       records: [
         mkRecord('s-zhouzimo', {
           performance: { warmup: 'excellent', jump: 'attention', crawl: 'excellent', throw: 'good', balanceBeam: 'good', teamGame: 'excellent' },
@@ -306,10 +338,10 @@ export function buildSeed(): SeedData {
       id: 'i-1', sessionId: 'se-jc-1', studentId: 's-zhaoxiaohu', type: 'compensation',
       item: 'throw', severity: '中',
       description: '投掷练习时右肩明显耸肩代偿，动作变形，询问后表示右肩有轻微酸胀感（有右腕旧伤史）。',
-      status: 'processing', createdAt: `${daysAgo(5)} 15:40`, createdBy: '王浩',
+      status: 'processing', createdAt: `${thisWeek(5)} 15:40`, createdBy: '王浩',
       timeline: [
-        { id: uid('h'), time: `${daysAgo(5)} 15:42`, role: 'coach', userName: '王浩', action: '现场停止投掷项目，改为低强度肩上挥臂练习，冰敷观察 10 分钟无红肿。' },
-        { id: uid('h'), time: `${daysAgo(5)} 16:10`, role: 'frontdesk', userName: '李婷', action: '课后电话告知家长情况，建议本周减少居家投掷练习，家长表示理解。' },
+        { id: uid('h'), time: `${thisWeek(5)} 15:42`, role: 'coach', userName: '王浩', action: '现场停止投掷项目，改为低强度肩上挥臂练习，冰敷观察 10 分钟无红肿。' },
+        { id: uid('h'), time: `${thisWeek(5)} 16:10`, role: 'frontdesk', userName: '李婷', action: '课后电话告知家长情况，建议本周减少居家投掷练习，家长表示理解。' },
       ],
     },
     {
@@ -326,12 +358,12 @@ export function buildSeed(): SeedData {
       id: 'i-3', sessionId: 'se-jj-1', studentId: 's-zhouzimo', type: 'compensation',
       item: 'jump', severity: '中',
       description: '连续跳跃落地时双膝内扣，存在膝关节损伤风险，已现场纠正。',
-      status: 'closed', createdAt: `${daysAgo(3)} 17:00`, createdBy: '刘洋',
+      status: 'closed', createdAt: `${thisWeek(3)} 17:00`, createdBy: '刘洋',
       timeline: [
-        { id: uid('h'), time: `${daysAgo(3)} 17:05`, role: 'coach', userName: '刘洋', action: '分解教学落地姿势，录制正确/错误对比视频。' },
-        { id: uid('h'), time: `${daysAgo(3)} 18:00`, role: 'frontdesk', userName: '李婷', action: '将对比视频与家庭练习发给家长。' },
-        { id: uid('h'), time: `${daysAgo(2)} 09:30`, role: 'parent', userName: '周强', action: '确认已收到，会监督家庭练习。' },
-        { id: uid('h'), time: `${daysAgo(2)} 10:00`, role: 'manager', userName: '张敏', action: '复核：进阶班跳跃项目增加落地姿势口令，事件闭环。' },
+        { id: uid('h'), time: `${thisWeek(3)} 17:05`, role: 'coach', userName: '刘洋', action: '分解教学落地姿势，录制正确/错误对比视频。' },
+        { id: uid('h'), time: `${thisWeek(3)} 18:00`, role: 'frontdesk', userName: '李婷', action: '将对比视频与家庭练习发给家长。' },
+        { id: uid('h'), time: `${thisWeek(2)} 09:30`, role: 'parent', userName: '周强', action: '确认已收到，会监督家庭练习。' },
+        { id: uid('h'), time: `${thisWeek(2)} 10:00`, role: 'manager', userName: '张敏', action: '复核：进阶班跳跃项目增加落地姿势口令，事件闭环。' },
       ],
       designAction: '保持',
     },
@@ -339,11 +371,11 @@ export function buildSeed(): SeedData {
       id: 'i-4', sessionId: 'se-jc-1', studentId: 's-linyinuo', type: 'conflict',
       item: 'teamGame', severity: '低',
       description: '团队接力游戏中与同伴争抢标志碟，情绪激动，短暂哭泣。',
-      status: 'closed', createdAt: `${daysAgo(5)} 15:50`, createdBy: '王浩',
+      status: 'closed', createdAt: `${thisWeek(5)} 15:50`, createdBy: '王浩',
       timeline: [
-        { id: uid('h'), time: `${daysAgo(5)} 15:52`, role: 'coach', userName: '王浩', action: '暂停游戏，引导双方表达，重新明确轮流规则，课后两人合作完成收拾器械。' },
-        { id: uid('h'), time: `${daysAgo(5)} 16:20`, role: 'frontdesk', userName: '李婷', action: '告知双方家长，均无异议。' },
-        { id: uid('h'), time: `${daysAgo(4)} 10:00`, role: 'parent', userName: '林芳', action: '确认知晓，感谢老师引导。' },
+        { id: uid('h'), time: `${thisWeek(5)} 15:52`, role: 'coach', userName: '王浩', action: '暂停游戏，引导双方表达，重新明确轮流规则，课后两人合作完成收拾器械。' },
+        { id: uid('h'), time: `${thisWeek(5)} 16:20`, role: 'frontdesk', userName: '李婷', action: '告知双方家长，均无异议。' },
+        { id: uid('h'), time: `${thisWeek(4)} 10:00`, role: 'parent', userName: '林芳', action: '确认知晓，感谢老师引导。' },
       ],
     },
     {
@@ -370,6 +402,18 @@ export function buildSeed(): SeedData {
     },
   ];
 
+  // ---------- 课前拦截 ----------
+  const interceptions: Interception[] = [
+    {
+      id: 'int-1', sessionId: 'se-qm-2', studentId: 's-suntiantian', date: thisWeek(4),
+      symptoms: ['cough'],
+      note: '到店时咳嗽明显，妈妈自述昨晚低烧，建议回家休息观察，明日复测体温。',
+      hasDoctorNote: false, decision: 'refund',
+      decisionReason: '本月第 1 次请假/拦截，在课包免费额度（1 次/月）内，返还课时',
+      createdBy: '李婷', createdAt: `${thisWeek(4)} 09:50`, parentAcked: true,
+    },
+  ];
+
   // ---------- 训练设计调整 ----------
   const designDecisions: DesignDecision[] = [
     {
@@ -390,6 +434,8 @@ export function buildSeed(): SeedData {
     { id: uid('t'), studentId: 's-chenchen', date: daysAgo(8), kind: 'assessment', title: '阶段复测', detail: '均分提升至 2.7，注意力 1→2 分。' },
     { id: uid('t'), studentId: 's-chenchen', date: daysAgo(7), kind: 'session', title: '课次表现 · 启蒙 A', detail: '爬行优秀；平衡木需牵手，注意力易分散。' },
     { id: uid('t'), studentId: 's-chenchen', date: daysAgo(7), kind: 'package', title: '课包消耗 1 课时', detail: '48 课时成长包，剩余 39 课时。' },
+    { id: uid('t'), studentId: 's-chenchen', date: thisWeek(4), kind: 'session', title: '课次表现 · 启蒙 A', detail: '平衡木可独立走半程，注意力比上周集中。' },
+    { id: uid('t'), studentId: 's-chenchen', date: thisWeek(4), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 38 课时。' },
     { id: uid('t'), studentId: 's-chenchen', date: daysAgo(20), kind: 'communication', title: '家长沟通', detail: '妈妈反馈在家坐不住，建议增加课前 5 分钟静心游戏。' },
 
     { id: uid('t'), studentId: 's-zhaoxiaohu', date: daysAgo(120), kind: 'enroll', title: '建立学员档案', detail: '右腕扭伤史（已愈）；期望增强体质、矫正体态。' },
@@ -398,9 +444,9 @@ export function buildSeed(): SeedData {
     { id: uid('t'), studentId: 's-zhaoxiaohu', date: daysAgo(30), kind: 'leave', title: '请假 1 次', detail: '感冒发烧请假，课时不扣减，安排后续补课。' },
     { id: uid('t'), studentId: 's-zhaoxiaohu', date: daysAgo(23), kind: 'makeup', title: '补课完成', detail: '随启蒙 A 班完成补课 1 课时（低强度）。' },
     { id: uid('t'), studentId: 's-zhaoxiaohu', date: daysAgo(10), kind: 'assessment', title: '阶段复测', detail: '均分 3.3，平衡 4 分，体态改善。' },
-    { id: uid('t'), studentId: 's-zhaoxiaohu', date: daysAgo(5), kind: 'incident', title: '动作代偿 · 投掷', detail: '右肩耸肩代偿，现场降强度并冰敷观察，已通知家长。' },
-    { id: uid('t'), studentId: 's-zhaoxiaohu', date: daysAgo(5), kind: 'session', title: '课次表现 · 基础 B', detail: '平衡木优秀；投掷需关注右肩。' },
-    { id: uid('t'), studentId: 's-zhaoxiaohu', date: daysAgo(5), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 27 课时。' },
+    { id: uid('t'), studentId: 's-zhaoxiaohu', date: thisWeek(5), kind: 'incident', title: '动作代偿 · 投掷', detail: '右肩耸肩代偿，现场降强度并冰敷观察，已通知家长。' },
+    { id: uid('t'), studentId: 's-zhaoxiaohu', date: thisWeek(5), kind: 'session', title: '课次表现 · 基础 B', detail: '平衡木优秀；投掷需关注右肩。' },
+    { id: uid('t'), studentId: 's-zhaoxiaohu', date: thisWeek(5), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 27 课时。' },
 
     { id: uid('t'), studentId: 's-suntiantian', date: daysAgo(45), kind: 'enroll', title: '建立学员档案', detail: '尘螨过敏；舞蹈 1 年；期望胆子大一些。' },
     { id: uid('t'), studentId: 's-suntiantian', date: daysAgo(40), kind: 'assessment', title: '首次体测', detail: '均分 2.7，柔韧好，对高度器械紧张。' },
@@ -408,21 +454,22 @@ export function buildSeed(): SeedData {
     { id: uid('t'), studentId: 's-suntiantian', date: daysAgo(7), kind: 'incident', title: '恐惧器械 · 平衡木', detail: '30cm 平衡木紧张哭泣，降为 10cm 低木牵手完成。' },
     { id: uid('t'), studentId: 's-suntiantian', date: daysAgo(7), kind: 'session', title: '课次表现 · 启蒙 A', detail: '跳跃落地需练习；平衡木情绪紧张。' },
     { id: uid('t'), studentId: 's-suntiantian', date: daysAgo(7), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 18 课时。' },
+    { id: uid('t'), studentId: 's-suntiantian', date: thisWeek(4), kind: 'interception', title: '课前拦截 · 咳嗽', detail: '到店时咳嗽明显，建议回家休息。课时处理：已返还（本月第 1 次，体验包免费额度 1 次/月内）。' },
 
     { id: uid('t'), studentId: 's-zhouzimo', date: daysAgo(200), kind: 'enroll', title: '建立学员档案', detail: '游泳 2 年、校足球队；期望提升爆发力。' },
     { id: uid('t'), studentId: 's-zhouzimo', date: daysAgo(190), kind: 'assessment', title: '首次体测', detail: '均分 3.8，直接推荐进阶 C 班。' },
     { id: uid('t'), studentId: 's-zhouzimo', date: daysAgo(190), kind: 'assign', title: '分班：进阶 C 班', detail: '依据体测推荐入班。' },
-    { id: uid('t'), studentId: 's-zhouzimo', date: daysAgo(3), kind: 'incident', title: '动作代偿 · 跳跃', detail: '落地双膝内扣，已纠正并发对比视频给家长。' },
-    { id: uid('t'), studentId: 's-zhouzimo', date: daysAgo(3), kind: 'session', title: '课次表现 · 进阶 C', detail: '热身/爬行/团队优秀；跳跃落地需持续纠正。' },
-    { id: uid('t'), studentId: 's-zhouzimo', date: daysAgo(3), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 56 课时。' },
+    { id: uid('t'), studentId: 's-zhouzimo', date: thisWeek(3), kind: 'incident', title: '动作代偿 · 跳跃', detail: '落地双膝内扣，已纠正并发对比视频给家长。' },
+    { id: uid('t'), studentId: 's-zhouzimo', date: thisWeek(3), kind: 'session', title: '课次表现 · 进阶 C', detail: '热身/爬行/团队优秀；跳跃落地需持续纠正。' },
+    { id: uid('t'), studentId: 's-zhouzimo', date: thisWeek(3), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 56 课时。' },
     { id: uid('t'), studentId: 's-zhouzimo', date: daysAgo(60), kind: 'levelup', title: '升阶评估 · 通过', detail: '基础 B → 进阶 C，依据：六项均分 3.8，教练建议。' },
 
     { id: uid('t'), studentId: 's-linyinuo', date: daysAgo(90), kind: 'enroll', title: '建立学员档案', detail: '海鲜过敏；期望多交朋友。' },
     { id: uid('t'), studentId: 's-linyinuo', date: daysAgo(85), kind: 'assessment', title: '首次体测', detail: '均分 2.8，性格内向，建议搭档任务。' },
     { id: uid('t'), studentId: 's-linyinuo', date: daysAgo(85), kind: 'assign', title: '分班：基础 B 班', detail: '依据体测推荐入班。' },
-    { id: uid('t'), studentId: 's-linyinuo', date: daysAgo(5), kind: 'incident', title: '同伴冲突 · 团队游戏', detail: '争抢标志碟，已引导和解，双方家长已告知。' },
-    { id: uid('t'), studentId: 's-linyinuo', date: daysAgo(5), kind: 'session', title: '课次表现 · 基础 B', detail: '各项目良好；团队游戏情绪波动。' },
-    { id: uid('t'), studentId: 's-linyinuo', date: daysAgo(5), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 36 课时。' },
+    { id: uid('t'), studentId: 's-linyinuo', date: thisWeek(5), kind: 'incident', title: '同伴冲突 · 团队游戏', detail: '争抢标志碟，已引导和解，双方家长已告知。' },
+    { id: uid('t'), studentId: 's-linyinuo', date: thisWeek(5), kind: 'session', title: '课次表现 · 基础 B', detail: '各项目良好；团队游戏情绪波动。' },
+    { id: uid('t'), studentId: 's-linyinuo', date: thisWeek(5), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 36 课时。' },
 
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(60), kind: 'enroll', title: '建立学员档案', detail: '3 岁额头缝针史；期望释放精力。' },
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(55), kind: 'assessment', title: '首次体测', detail: '均分 2.5，规则意识弱。' },
@@ -430,21 +477,24 @@ export function buildSeed(): SeedData {
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(7), kind: 'incident', title: '摔倒擦伤 · 爬行', detail: '右手掌擦红（地垫接缝），清洁冷敷，家长已确认。' },
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(7), kind: 'session', title: '课次表现 · 启蒙 A', detail: '体能充沛；团队游戏规则意识待加强。' },
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(7), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 4 课时，课包即将到期。' },
+    { id: uid('t'), studentId: 's-wutiantian', date: thisWeek(4), kind: 'session', title: '课次表现 · 启蒙 A', detail: '团队游戏能等待轮流，规则意识有进步。' },
+    { id: uid('t'), studentId: 's-wutiantian', date: thisWeek(4), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 3 课时，课包即将到期。' },
+    { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(2), kind: 'leave', title: '请假 1 次', detail: '咳嗽请假（课时不扣减，可安排补课）。' },
 
     { id: uid('t'), studentId: 's-zhenghao', date: daysAgo(150), kind: 'enroll', title: '建立学员档案', detail: '体操 1 年；家长期望尽快升阶。' },
     { id: uid('t'), studentId: 's-zhenghao', date: daysAgo(145), kind: 'assessment', title: '首次体测', detail: '均分 3.7，接近进阶班水平。' },
     { id: uid('t'), studentId: 's-zhenghao', date: daysAgo(145), kind: 'assign', title: '分班：基础 B 班', detail: '观察 1 个月后评估升阶。' },
     { id: uid('t'), studentId: 's-zhenghao', date: daysAgo(6), kind: 'assessment', title: '阶段复测', detail: '均分 3.8，已具备进阶班条件。' },
-    { id: uid('t'), studentId: 's-zhenghao', date: daysAgo(5), kind: 'session', title: '课次表现 · 基础 B', detail: '多项优秀，可承担小组示范。教练建议：适合升阶。' },
-    { id: uid('t'), studentId: 's-zhenghao', date: daysAgo(5), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 18 课时。' },
+    { id: uid('t'), studentId: 's-zhenghao', date: thisWeek(5), kind: 'session', title: '课次表现 · 基础 B', detail: '多项优秀，可承担小组示范。教练建议：适合升阶。' },
+    { id: uid('t'), studentId: 's-zhenghao', date: thisWeek(5), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 18 课时。' },
     { id: uid('t'), studentId: 's-zhenghao', date: today(), kind: 'communication', title: '家长临时升阶要求', detail: '妈妈到前台要求本月升进阶 C 班，门店评估中。' },
 
     { id: uid('t'), studentId: 's-hemuyang', date: daysAgo(260), kind: 'enroll', title: '建立学员档案', detail: '跆拳道黄带；左踝扭伤史；青霉素过敏。' },
     { id: uid('t'), studentId: 's-hemuyang', date: daysAgo(250), kind: 'assessment', title: '首次体测', detail: '均分 3.5，力量好，左踝需保护。' },
     { id: uid('t'), studentId: 's-hemuyang', date: daysAgo(250), kind: 'assign', title: '分班：进阶 C 班', detail: '依据体测推荐入班。' },
-    { id: uid('t'), studentId: 's-hemuyang', date: daysAgo(3), kind: 'session', title: '课次表现 · 进阶 C', detail: '投掷优秀；跳跃 2 组后左踝不适，已减量。' },
-    { id: uid('t'), studentId: 's-hemuyang', date: daysAgo(3), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 41 课时。' },
+    { id: uid('t'), studentId: 's-hemuyang', date: thisWeek(3), kind: 'session', title: '课次表现 · 进阶 C', detail: '投掷优秀；跳跃 2 组后左踝不适，已减量。' },
+    { id: uid('t'), studentId: 's-hemuyang', date: thisWeek(3), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 41 课时。' },
   ];
 
-  return { users, students, classes, sessions, incidents, assessments, timeline, designDecisions };
+  return { users, students, classes, sessions, incidents, interceptions, assessments, timeline, designDecisions };
 }

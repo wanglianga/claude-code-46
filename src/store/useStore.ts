@@ -12,6 +12,7 @@ import {
   Incident,
   IncidentStatus,
   IncidentType,
+  Interception,
   LevelUpAssessment,
   MovementItem,
   Rating,
@@ -21,11 +22,12 @@ import {
   SessionStatus,
   Student,
   StudentSessionRecord,
+  Symptom,
   TimelineEvent,
   TimelineKind,
   User,
 } from '../types';
-import { nowTime, today, uid } from '../utils/recommend';
+import { countMonthlyFreebies, evaluateRefund, nowTime, today, uid } from '../utils/recommend';
 
 export interface NewStudentInput {
   name: string;
@@ -48,6 +50,7 @@ interface StoreState {
   classes: ClassCourse[];
   sessions: Session[];
   incidents: Incident[];
+  interceptions: Interception[];
   assessments: Assessment[];
   timeline: TimelineEvent[];
   designDecisions: DesignDecision[];
@@ -89,6 +92,16 @@ interface StoreState {
   }) => string;
   addHandling: (incidentId: string, action: string, newStatus?: IncidentStatus) => void;
   setDesignAction: (incidentId: string, action: DesignAction) => void;
+
+  // 课前拦截
+  addInterception: (input: {
+    sessionId: string;
+    studentId: string;
+    symptoms: Symptom[];
+    note: string;
+    hasDoctorNote: boolean;
+  }) => string;
+  ackInterception: (interceptionId: string) => void;
 
   // 请假补课 / 沟通 / 升阶
   addMakeup: (studentId: string, date: string, note: string) => void;
@@ -258,7 +271,7 @@ export const useStore = create<StoreState>()(
         const session = s.sessions.find((se) => se.id === sessionId);
         if (!session || session.status === 'done') return;
         const cls = s.classes.find((c) => c.id === session.classId);
-        const attended = session.records.filter((r) => r.checklist.signed && !r.leave);
+        const attended = session.records.filter((r) => r.checklist.signed && !r.leave && !r.intercepted);
         // 消课 + 时间线
         const students = s.students.map((st) => {
           if (attended.some((r) => r.studentId === st.id)) {
@@ -343,6 +356,69 @@ export const useStore = create<StoreState>()(
           incidents: s.incidents.map((inc) => (inc.id === incidentId ? { ...inc, designAction: action } : inc)),
         })),
 
+      addInterception: (input) => {
+        const s = get();
+        const me = s.users.find((u) => u.id === s.currentUserId);
+        const student = s.students.find((x) => x.id === input.studentId);
+        if (!student) return '';
+        // 课包规则 + 医生证明 + 历史请假 → 返还判定
+        const used = countMonthlyFreebies(input.studentId, s.timeline, s.interceptions);
+        const evalResult = evaluateRefund(student.pkg.name, input.hasDoctorNote, used);
+        const id = uid('int');
+        const interception: Interception = {
+          id,
+          sessionId: input.sessionId,
+          studentId: input.studentId,
+          date: today(),
+          symptoms: input.symptoms,
+          note: input.note,
+          hasDoctorNote: input.hasDoctorNote,
+          decision: evalResult.decision,
+          decisionReason: evalResult.reason,
+          createdBy: me?.name ?? '前台',
+          createdAt: nowTime(),
+          parentAcked: false,
+        };
+        // 标记课次记录为已拦截
+        set((st) => ({
+          interceptions: [interception, ...st.interceptions],
+          sessions: st.sessions.map((se) =>
+            se.id === input.sessionId
+              ? {
+                  ...se,
+                  records: se.records.map((r) =>
+                    r.studentId === input.studentId
+                      ? { ...r, intercepted: true, checklist: { ...r.checklist, healthOk: false, note: input.note || r.checklist.note } }
+                      : r,
+                  ),
+                }
+              : se,
+          ),
+        }));
+        const symptomText = input.symptoms.map((x) => ({ cough: '咳嗽', fatigue: '疲劳', legPain: '腿部疼痛' })[x]).join('、');
+        get().pushTimeline(
+          input.studentId,
+          'interception',
+          `课前拦截 · ${symptomText}`,
+          `${input.note || '到店身体状态不佳，前台拦截。'}课时处理：${evalResult.decision === 'refund' ? '已返还' : '不返还，正常消耗'}（${evalResult.reason}）。`,
+        );
+        // 不返还 → 立即消耗 1 课时
+        if (evalResult.decision === 'noRefund') {
+          set((st) => ({
+            students: st.students.map((x) =>
+              x.id === input.studentId ? { ...x, pkg: { ...x.pkg, used: Math.min(x.pkg.used + 1, x.pkg.total) } } : x,
+            ),
+          }));
+          get().pushTimeline(input.studentId, 'package', '课包消耗 1 课时', '课前拦截未返还（本月免费额度已用完且无医生证明）。');
+        }
+        return id;
+      },
+
+      ackInterception: (interceptionId) =>
+        set((s) => ({
+          interceptions: s.interceptions.map((i) => (i.id === interceptionId ? { ...i, parentAcked: true } : i)),
+        })),
+
       addMakeup: (studentId, date, note) => {
         get().pushTimeline(studentId, 'makeup', '补课完成', `${date} ${note}`);
       },
@@ -385,8 +461,8 @@ export const useStore = create<StoreState>()(
       },
     }),
     {
-      name: 'kidfit-store-v1',
-      version: 1,
+      name: 'kidfit-store-v2',
+      version: 2,
     },
   ),
 );

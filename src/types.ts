@@ -135,6 +135,7 @@ export interface StudentSessionRecord {
   studentId: string;
   checklist: Checklist;
   leave?: boolean; // 请假（不消课）
+  intercepted?: boolean; // 课前拦截（按规则判定是否返还课时）
   performance: Partial<Record<MovementItem, Rating>>;
   performanceNote: string;
   // 课后报告（教练填写）
@@ -142,6 +143,34 @@ export interface StudentSessionRecord {
   homeExercise: string; // 家庭练习
   levelUpAdvice: '适合升阶' | '继续保持' | '暂缓';
   reportAcked: boolean; // 家长已确认
+}
+
+// ===================== 课前身体状态拦截 =====================
+
+/** 到店可见症状 */
+export type Symptom = 'cough' | 'fatigue' | 'legPain';
+
+export const SYMPTOMS: Symptom[] = ['cough', 'fatigue', 'legPain'];
+
+export const SYMPTOM_LABELS: Record<Symptom, string> = {
+  cough: '咳嗽',
+  fatigue: '疲劳',
+  legPain: '腿部疼痛',
+};
+
+export interface Interception {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  date: string;
+  symptoms: Symptom[];
+  note: string;
+  hasDoctorNote: boolean; // 是否有医生证明
+  decision: 'refund' | 'noRefund'; // 课时处理：返还 / 不返还
+  decisionReason: string; // 判定依据（课包规则 + 医生证明 + 历史请假）
+  createdBy: string;
+  createdAt: string;
+  parentAcked: boolean; // 家长已查看课时处理结果
 }
 
 export type SessionStatus = 'pending' | 'checking' | 'ongoing' | 'done';
@@ -225,6 +254,7 @@ export type TimelineKind =
   | 'assign' // 分班
   | 'session' // 课次表现
   | 'incident' // 伤情/事件
+  | 'interception' // 课前拦截
   | 'leave' // 请假
   | 'makeup' // 补课
   | 'levelup' // 升阶评估
@@ -237,6 +267,7 @@ export const TIMELINE_KIND_LABELS: Record<TimelineKind, string> = {
   assign: '分班',
   session: '课次表现',
   incident: '伤情/事件',
+  interception: '课前拦截',
   leave: '请假',
   makeup: '补课',
   levelup: '升阶评估',

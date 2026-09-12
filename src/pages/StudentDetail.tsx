@@ -11,9 +11,10 @@ import {
   MovementItem,
   RATING_LABELS,
   Scores,
+  SYMPTOM_LABELS,
   TIMELINE_KIND_LABELS,
 } from '../types';
-import { ageOf, avgScore, recommendClass, today } from '../utils/recommend';
+import { ageOf, avgScore, recommendClass, today, weekLoad } from '../utils/recommend';
 
 export default function StudentDetail() {
   const { id } = useParams();
@@ -34,6 +35,9 @@ export default function StudentDetail() {
   const [commNote, setCommNote] = useState('');
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [levelUpReason, setLevelUpReason] = useState('');
+  const [showAssign, setShowAssign] = useState(false);
+  const [assignClassId, setAssignClassId] = useState('');
+  const [assignReason, setAssignReason] = useState('');
 
   const assessments = useMemo(
     () => store.assessments.filter((a) => a.studentId === id).sort((a, b) => (a.date < b.date ? 1 : -1)),
@@ -46,13 +50,23 @@ export default function StudentDetail() {
   const parent = store.users.find((u) => u.id === student.parentId);
   const latest = latestAssessment(store.assessments, student.id);
   const previous = assessments[1];
-  const rec = latest ? recommendClass(latest.scores, ageOf(student.birthDate), store.classes) : null;
+  const rec = latest
+    ? recommendClass(latest.scores, ageOf(student.birthDate), store.classes, {
+        pastInjuries: student.pastInjuries,
+        parentExpectation: student.parentExpectation,
+      })
+    : null;
+  const load = weekLoad(student.id, student.classId, store.sessions);
+  const interceptions = store.interceptions.filter((i) => i.studentId === student.id);
+  const assignHistory = store.timeline
+    .filter((t) => t.studentId === student.id && t.kind === 'assign')
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
   const timeline = store.timeline
     .filter((t) => t.studentId === student.id)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   const incidents = store.incidents.filter((i) => i.studentId === student.id);
   const reports = store.sessions
-    .filter((se) => se.status === 'done' && se.records.some((r) => r.studentId === student.id && r.checklist.signed && !r.leave))
+    .filter((se) => se.status === 'done' && se.records.some((r) => r.studentId === student.id && r.checklist.signed && !r.leave && !r.intercepted))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   const remain = student.pkg.total - student.pkg.used;
   const canEdit = user.role === 'coach' || user.role === 'manager';
@@ -102,7 +116,7 @@ export default function StudentDetail() {
           { key: 'overview', label: '档案总览' },
           { key: 'timeline', label: `成长时间线（${timeline.length}）` },
           { key: 'reports', label: `课后报告（${reports.length}）` },
-          { key: 'incidents', label: `伤情与事件（${incidents.length}）` },
+          { key: 'incidents', label: `伤情与事件（${incidents.length + interceptions.length}）` },
         ]}
       />
 
@@ -134,7 +148,46 @@ export default function StudentDetail() {
               )}
             </Card>
 
-            <Card title="班级与推荐">
+            <Card title="本周训练负荷">
+              <div className="flex-between">
+                <span className="strong">{load.attended} / {load.planned} 节</span>
+                <span className={`strong ${load.intercepted > 0 ? 'text-danger' : 'text-success'}`}>{load.percent}%</span>
+              </div>
+              <div className="progress mt8">
+                <div
+                  style={{
+                    width: `${load.percent}%`,
+                    background: load.intercepted > 0 ? 'var(--danger)' : 'var(--primary)',
+                  }}
+                />
+              </div>
+              <div className="tag-list mt12">
+                {load.intercepted > 0 && <Badge color="danger">课前拦截 {load.intercepted} 节</Badge>}
+                {load.leave > 0 && <Badge color="gray">请假 {load.leave} 节</Badge>}
+                {load.intercepted === 0 && load.leave === 0 && <Badge color="success">出勤正常</Badge>}
+              </div>
+              <div className={`alert mt12 ${load.intercepted > 0 ? 'a-warning' : 'a-info'}`} style={{ marginBottom: 0 }}>
+                {load.hint}
+              </div>
+            </Card>
+
+            <Card
+              title="班级与推荐"
+              extra={
+                canEdit && (
+                  <button
+                    className="btn btn-sm btn-outline"
+                    onClick={() => {
+                      setAssignClassId(student.classId ?? rec?.classId ?? '');
+                      setAssignReason('');
+                      setShowAssign(true);
+                    }}
+                  >
+                    调整班级
+                  </button>
+                )
+              }
+            >
               {cls && (
                 <div className="mb12">
                   当前班级：<Badge color="primary">{cls.name}</Badge>
@@ -143,7 +196,16 @@ export default function StudentDetail() {
               )}
               {rec && (
                 <>
-                  <div className="muted small mb8">基于最新体测（{latest?.date}）的系统推荐：</div>
+                  <div className="muted small mb8">
+                    基于最新体测（{latest?.date}）、既往伤情与家长目标的系统推荐：
+                  </div>
+                  <div className="tag-list mb8">
+                    <Badge color="info">体测均分 {rec.avg}</Badge>
+                    <Badge color={student.pastInjuries.length ? 'warning' : 'gray'}>
+                      既往伤情：{student.pastInjuries.length ? student.pastInjuries.join('；') : '无'}
+                    </Badge>
+                    <Badge color="gray">家长目标：{student.parentExpectation.slice(0, 16)}{student.parentExpectation.length > 16 ? '…' : ''}</Badge>
+                  </div>
                   <div className="alert a-info" style={{ marginBottom: 0 }}>
                     <div className="strong mb8">推荐：{rec.className}（均分 {rec.avg}）</div>
                     {rec.reasons.map((r, i) => <div key={i}>· {r}</div>)}
@@ -151,12 +213,28 @@ export default function StudentDetail() {
                   {canEdit && rec.classId && rec.classId !== student.classId && (
                     <button
                       className="btn btn-sm mt12"
-                      onClick={() => store.assignClass(student.id, rec.classId!, `按最新体测调整：${rec.reasons.join('；')}`)}
+                      onClick={() =>
+                        store.assignClass(student.id, rec.classId!, `按系统推荐调班：${rec.reasons.join('；')}`)
+                      }
                     >
                       按推荐调整班级
                     </button>
                   )}
                 </>
+              )}
+              {assignHistory.length > 0 && (
+                <div className="mt12">
+                  <div className="muted small strong mb8">分班/调班历史（含原因）</div>
+                  {assignHistory.map((h) => (
+                    <div key={h.id} className="mb8">
+                      <div className="flex">
+                        <span className="strong small">{h.title}</span>
+                        <span className="muted small">{h.date}</span>
+                      </div>
+                      <div className="muted small">{h.detail}</div>
+                    </div>
+                  ))}
+                </div>
               )}
             </Card>
           </div>
@@ -251,7 +329,30 @@ export default function StudentDetail() {
 
       {tab === 'incidents' && (
         <div>
-          {incidents.length === 0 && <Empty text="无伤情/事件记录" icon="✅" />}
+          {interceptions.length > 0 && (
+            <Card title={`课前拦截记录（${interceptions.length}）`}>
+              {interceptions.map((i) => {
+                const se = store.sessions.find((s) => s.id === i.sessionId);
+                return (
+                  <div className="report-card" key={i.id}>
+                    <div className="flex-between wrap">
+                      <div className="flex wrap">
+                        <Badge color="danger">课前拦截</Badge>
+                        <span className="strong">{i.symptoms.map((x) => SYMPTOM_LABELS[x]).join('、')}</span>
+                        <span className="muted small">{i.date} · {se?.time ?? ''} 课次 · {i.createdBy}</span>
+                      </div>
+                      <Badge color={i.decision === 'refund' ? 'success' : 'warning'}>
+                        课时{i.decision === 'refund' ? '已返还' : '不返还'}
+                      </Badge>
+                    </div>
+                    <div className="muted mt8">{i.note}</div>
+                    <div className="muted small mt8">判定依据：{i.decisionReason}{i.hasDoctorNote ? '（有医生证明）' : ''}</div>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+          {incidents.length === 0 && interceptions.length === 0 && <Empty text="无伤情/事件记录" icon="✅" />}
           {incidents.map((i) => (
             <IncidentCard key={i.id} incident={i} showSession />
           ))}
@@ -405,6 +506,53 @@ export default function StudentDetail() {
             <label>评估依据</label>
             <textarea value={levelUpReason} onChange={(e) => setLevelUpReason(e.target.value)} placeholder="体测数据、课堂表现、安全考量…" />
           </div>
+        </Modal>
+      )}
+
+      {/* 调整班级（必须填写原因，留痕） */}
+      {showAssign && (
+        <Modal
+          title={`调整班级 · ${student.name}`}
+          onClose={() => setShowAssign(false)}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setShowAssign(false)}>取消</button>
+              <button
+                className="btn"
+                disabled={!assignClassId || !assignReason.trim() || assignClassId === student.classId}
+                onClick={() => {
+                  store.assignClass(student.id, assignClassId, `教练手动调班：${assignReason.trim()}`);
+                  setShowAssign(false);
+                }}
+              >
+                确认调整
+              </button>
+            </>
+          }
+        >
+          <div className="field mb12">
+            <label>目标班级</label>
+            <select value={assignClassId} onChange={(e) => setAssignClassId(e.target.value)}>
+              {store.classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}（{c.level} · {c.ageRange}）
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>调整原因 *（将写入成长档案，供家长与门店回溯）</label>
+            <textarea
+              value={assignReason}
+              onChange={(e) => setAssignReason(e.target.value)}
+              placeholder="如：最近复测平衡/协调达 4 分，家长目标为提升爆发力，且左踝伤情已痊愈…"
+            />
+          </div>
+          {rec && (
+            <div className="alert a-info mt12" style={{ marginBottom: 0 }}>
+              系统推荐参考：{rec.className}（均分 {rec.avg}）。调班请综合体测、既往伤情与家长目标。
+            </div>
+          )}
         </Modal>
       )}
 

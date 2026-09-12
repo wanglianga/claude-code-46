@@ -8,9 +8,10 @@ import {
   MOVEMENT_LABELS,
   MovementItem,
   RATING_LABELS,
+  SYMPTOM_LABELS,
   TIMELINE_KIND_LABELS,
 } from '../types';
-import { ageOf, HOME_EXERCISES, recommendClass, riskHints } from '../utils/recommend';
+import { ageOf, HOME_EXERCISES, recommendClass, riskHints, weekLoad } from '../utils/recommend';
 
 export default function ParentHome() {
   const user = useCurrentUser();
@@ -29,10 +30,19 @@ export default function ParentHome() {
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   const latest = latestAssessment(store.assessments, student.id);
   const previous = assessments[1];
-  const rec = latest ? recommendClass(latest.scores, ageOf(student.birthDate), store.classes) : null;
+  const rec = latest
+    ? recommendClass(latest.scores, ageOf(student.birthDate), store.classes, {
+        pastInjuries: student.pastInjuries,
+        parentExpectation: student.parentExpectation,
+      })
+    : null;
+  const load = weekLoad(student.id, student.classId, store.sessions);
+  const interceptions = store.interceptions
+    .filter((i) => i.studentId === student.id)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
   const reports = store.sessions
-    .filter((se) => se.status === 'done' && se.records.some((r) => r.studentId === student.id && r.checklist.signed && !r.leave))
+    .filter((se) => se.status === 'done' && se.records.some((r) => r.studentId === student.id && r.checklist.signed && !r.leave && !r.intercepted))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 
   const incidents = store.incidents.filter((i) => i.studentId === student.id);
@@ -100,8 +110,46 @@ export default function ParentHome() {
         <div className="progress mt12">
           <div style={{ width: `${(student.pkg.used / student.pkg.total) * 100}%` }} />
         </div>
-        <div className="muted small mt8">课包 {student.pkg.name}：已上 {student.pkg.used} / {student.pkg.total} 课时</div>
+        <div className="flex-between wrap mt8">
+          <span className="muted small">课包 {student.pkg.name}：已上 {student.pkg.used} / {student.pkg.total} 课时</span>
+          <span className={`small ${load.intercepted > 0 ? 'text-danger' : 'muted'}`}>
+            本周训练负荷 {load.attended}/{load.planned} 节（{load.percent}%）
+            {load.intercepted > 0 && ` · 因课前拦截减少 ${load.intercepted} 节`}
+          </span>
+        </div>
       </div>
+
+      {/* 课时处理结果（课前拦截） */}
+      {interceptions.length > 0 && (
+        <Card title={`课时处理结果（${interceptions.length}）`}>
+          {interceptions.map((i) => (
+            <div className={`report-card ${!i.parentAcked ? 'unacked' : ''}`} key={i.id}>
+              <div className="flex-between wrap">
+                <div className="flex wrap">
+                  <Badge color="danger">课前拦截</Badge>
+                  <span className="strong">{i.symptoms.map((x) => SYMPTOM_LABELS[x]).join('、')}</span>
+                  <span className="muted small">{i.createdAt} · {i.createdBy} 登记</span>
+                </div>
+                {i.parentAcked ? (
+                  <Badge color="success">已知晓</Badge>
+                ) : (
+                  <button className="btn btn-sm btn-success" onClick={() => store.ackInterception(i.id)}>
+                    ✔ 确认知晓
+                  </button>
+                )}
+              </div>
+              <div className="muted mt8">{i.note}</div>
+              <div className="mt8">
+                课时处理：
+                <Badge color={i.decision === 'refund' ? 'success' : 'warning'}>
+                  {i.decision === 'refund' ? '已返还，不扣课时' : '不返还，正常消耗 1 课时'}
+                </Badge>
+                <span className="muted small">（{i.decisionReason}）</span>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
 
       {/* 待确认事件 */}
       {openIncidents.length > 0 && (

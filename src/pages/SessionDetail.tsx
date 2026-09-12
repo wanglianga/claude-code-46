@@ -15,8 +15,11 @@ import {
   SESSION_STATUS_LABELS,
   Severity,
   StudentSessionRecord,
+  SYMPTOM_LABELS,
+  SYMPTOMS,
+  Symptom,
 } from '../types';
-import { HOME_EXERCISES } from '../utils/recommend';
+import { countMonthlyFreebies, evaluateRefund, HOME_EXERCISES } from '../utils/recommend';
 
 const STATUS_COLOR: Record<string, string> = {
   pending: 'gray',
@@ -56,6 +59,12 @@ export default function SessionDetail() {
   const [incBodyPart, setIncBodyPart] = useState('');
   const [incTreatment, setIncTreatment] = useState('');
 
+  // 课前拦截弹窗
+  const [interceptFor, setInterceptFor] = useState<string | null>(null); // studentId
+  const [symptoms, setSymptoms] = useState<Symptom[]>([]);
+  const [interceptNote, setInterceptNote] = useState('');
+  const [doctorNote, setDoctorNote] = useState(false);
+
   if (!session || !user) return <Empty text="课次不存在" icon="❓" />;
 
   const cls = store.classes.find((c) => c.id === session.classId);
@@ -87,8 +96,35 @@ export default function SessionDetail() {
     setIncidentFor(null);
   };
 
+  // 课前拦截
+  const openIntercept = (studentId: string) => {
+    setInterceptFor(studentId);
+    setSymptoms([]);
+    setInterceptNote('');
+    setDoctorNote(false);
+  };
+  const interceptStudent = interceptFor ? store.students.find((x) => x.id === interceptFor) : undefined;
+  const refundEval = interceptStudent
+    ? evaluateRefund(
+        interceptStudent.pkg.name,
+        doctorNote,
+        countMonthlyFreebies(interceptStudent.id, store.timeline, store.interceptions),
+      )
+    : null;
+  const submitInterception = () => {
+    if (!interceptFor || symptoms.length === 0) return;
+    store.addInterception({
+      sessionId: session.id,
+      studentId: interceptFor,
+      symptoms,
+      note: interceptNote.trim(),
+      hasDoctorNote: doctorNote,
+    });
+    setInterceptFor(null);
+  };
+
   const allChecked = session.records.every(
-    (r) => r.leave || (r.checklist.signed && r.checklist.equipment && r.checklist.healthOk && r.checklist.parentAuth),
+    (r) => r.leave || r.intercepted || (r.checklist.signed && r.checklist.equipment && r.checklist.healthOk && r.checklist.parentAuth),
   );
 
   return (
@@ -158,6 +194,10 @@ export default function SessionDetail() {
           {session.records.map((r) => {
             const st = store.students.find((x) => x.id === r.studentId)!;
             const done = CHECK_ITEMS.every((c) => r.checklist[c.key]);
+            const interception = store.interceptions.find(
+              (i) => i.sessionId === session.id && i.studentId === r.studentId,
+            );
+            const locked = r.leave || r.intercepted || session.status === 'done';
             return (
               <Card key={r.studentId}>
                 <div className="flex-between wrap mb12">
@@ -165,7 +205,9 @@ export default function SessionDetail() {
                     <Avatar name={st.name} />
                     <div>
                       <span className="strong">{st.name}</span>
-                      {r.leave ? (
+                      {r.intercepted ? (
+                        <Badge color="danger"> 已拦截</Badge>
+                      ) : r.leave ? (
                         <Badge color="gray"> 已请假</Badge>
                       ) : done ? (
                         <Badge color="success"> 可入场</Badge>
@@ -177,45 +219,80 @@ export default function SessionDetail() {
                     </div>
                     {r.checklist.note && <span className="muted small">备注：{r.checklist.note}</span>}
                   </div>
-                  {canCheck && !r.leave && session.status !== 'done' && (
-                    <button
-                      className="btn btn-sm btn-ghost"
-                      onClick={() => {
-                        const reason = window.prompt('请假原因：', '家长临时请假');
-                        if (reason !== null) store.markLeave(session.id, r.studentId, reason || '家长请假');
-                      }}
-                    >
-                      标记请假
-                    </button>
-                  )}
-                </div>
-                <div className="check-grid">
-                  {CHECK_ITEMS.map((c) => {
-                    const checked = r.checklist[c.key];
-                    return (
-                      <div
-                        key={c.key}
-                        className={`check-item ${checked ? 'checked' : ''} ${!canCheck || r.leave || session.status === 'done' ? 'disabled' : ''}`}
+                  {canCheck && !r.leave && !r.intercepted && session.status !== 'done' && (
+                    <div className="flex">
+                      <button
+                        className="btn btn-sm btn-ghost"
                         onClick={() => {
-                          if (!canCheck || r.leave || session.status === 'done') return;
-                          store.updateChecklist(session.id, r.studentId, { [c.key]: !checked });
+                          const reason = window.prompt('请假原因：', '家长临时请假');
+                          if (reason !== null) store.markLeave(session.id, r.studentId, reason || '家长请假');
                         }}
                       >
-                        <span className="box">{checked ? '✓' : ''}</span>
-                        {c.icon} {c.label}
-                      </div>
-                    );
-                  })}
+                        标记请假
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        title="孩子到店出现咳嗽/疲劳/腿部疼痛时发起"
+                        onClick={() => openIntercept(r.studentId)}
+                      >
+                        🚫 课前拦截
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {canCheck && !r.leave && session.status !== 'done' && (
-                  <div className="mt8">
-                    <input
-                      style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5 }}
-                      placeholder="核验备注（如：家长反馈昨晚咳嗽，观察中）"
-                      value={r.checklist.note ?? ''}
-                      onChange={(e) => store.updateChecklist(session.id, r.studentId, { note: e.target.value })}
-                    />
+
+                {/* 拦截信息条 */}
+                {r.intercepted && interception && (
+                  <div className="alert a-danger">
+                    <div className="strong mb8">
+                      🚫 课前拦截：{interception.symptoms.map((x) => SYMPTOM_LABELS[x]).join('、')}
+                      <span className="muted small" style={{ marginLeft: 8 }}>
+                        {interception.createdAt} · {interception.createdBy}
+                        {interception.hasDoctorNote ? ' · 有医生证明' : ' · 无医生证明'}
+                      </span>
+                    </div>
+                    <div>{interception.note}</div>
+                    <div className="mt8">
+                      课时处理：
+                      <Badge color={interception.decision === 'refund' ? 'success' : 'warning'}>
+                        {interception.decision === 'refund' ? '已返还' : '不返还，正常消耗'}
+                      </Badge>
+                      <span className="muted small">（{interception.decisionReason}）</span>
+                    </div>
                   </div>
+                )}
+
+                {!r.intercepted && (
+                  <>
+                    <div className="check-grid">
+                      {CHECK_ITEMS.map((c) => {
+                        const checked = r.checklist[c.key];
+                        return (
+                          <div
+                            key={c.key}
+                            className={`check-item ${checked ? 'checked' : ''} ${!canCheck || locked ? 'disabled' : ''}`}
+                            onClick={() => {
+                              if (!canCheck || locked) return;
+                              store.updateChecklist(session.id, r.studentId, { [c.key]: !checked });
+                            }}
+                          >
+                            <span className="box">{checked ? '✓' : ''}</span>
+                            {c.icon} {c.label}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {canCheck && !locked && (
+                      <div className="mt8">
+                        <input
+                          style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5 }}
+                          placeholder="核验备注（如：家长反馈昨晚咳嗽，观察中）"
+                          value={r.checklist.note ?? ''}
+                          onChange={(e) => store.updateChecklist(session.id, r.studentId, { note: e.target.value })}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </Card>
             );
@@ -229,7 +306,27 @@ export default function SessionDetail() {
           {session.status !== 'ongoing' && session.status !== 'done' && (
             <div className="alert a-info">课次未开始。完成课前核验后，教练点击「开始上课」即可记录课堂表现。</div>
           )}
-          {session.records.filter((r) => !r.leave).map((r) => {
+          {/* 未上课学员及原因（教练可见） */}
+          {session.records.some((r) => r.leave || r.intercepted) && (
+            <div className="alert a-warning">
+              <div className="strong mb8">本节课未上课学员</div>
+              {session.records.filter((r) => r.leave || r.intercepted).map((r) => {
+                const st = store.students.find((x) => x.id === r.studentId)!;
+                const interception = store.interceptions.find(
+                  (i) => i.sessionId === session.id && i.studentId === r.studentId,
+                );
+                return (
+                  <div key={r.studentId}>
+                    · <span className="strong">{st.name}</span>：
+                    {r.intercepted
+                      ? `课前拦截（${interception ? interception.symptoms.map((x) => SYMPTOM_LABELS[x]).join('、') : '身体状态不佳'}${interception?.note ? `，${interception.note}` : ''}；课时${interception?.decision === 'refund' ? '已返还' : '不返还'}）`
+                      : `请假（${r.checklist.note || '家长请假'}，课时不扣减）`}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {session.records.filter((r) => !r.leave && !r.intercepted).map((r) => {
             const st = store.students.find((x) => x.id === r.studentId)!;
             const locked = session.status === 'done' || !canCoach;
             return (
@@ -313,10 +410,10 @@ export default function SessionDetail() {
               教练在课次进行中可预填报告；点击顶部「完成课次」后自动消课，报告同步推送给家长确认。
             </div>
           )}
-          {session.records.filter((r) => !r.leave && r.checklist.signed).map((r) => (
+          {session.records.filter((r) => !r.leave && !r.intercepted && r.checklist.signed).map((r) => (
             <ReportEditor key={r.studentId} sessionId={session.id} record={r} locked={!canCoach || session.status === 'done'} />
           ))}
-          {session.records.filter((r) => !r.leave && r.checklist.signed).length === 0 && (
+          {session.records.filter((r) => !r.leave && !r.intercepted && r.checklist.signed).length === 0 && (
             <Empty text="本节课没有签到学员" icon="📝" />
           )}
         </div>
@@ -386,6 +483,70 @@ export default function SessionDetail() {
           )}
           <div className="alert a-info" style={{ marginBottom: 0 }}>
             登记后事件进入「待处理」，前台将联系家长，店长复盘后闭环；全程记录进入学员成长档案。
+          </div>
+        </Modal>
+      )}
+
+      {/* 课前拦截弹窗 */}
+      {interceptFor && interceptStudent && refundEval && (
+        <Modal
+          title={`课前拦截 · ${interceptStudent.name}`}
+          onClose={() => setInterceptFor(null)}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setInterceptFor(null)}>取消</button>
+              <button className="btn btn-danger" disabled={symptoms.length === 0} onClick={submitInterception}>
+                🚫 确认拦截（{refundEval.decision === 'refund' ? '返还课时' : '不返还课时'}）
+              </button>
+            </>
+          }
+        >
+          <div className="field mb12">
+            <label>到店症状（可多选）*</label>
+            <div className="flex wrap">
+              {SYMPTOMS.map((s) => {
+                const on = symptoms.includes(s);
+                return (
+                  <button
+                    key={s}
+                    className={`btn btn-sm ${on ? 'btn-danger' : 'btn-ghost'}`}
+                    onClick={() => setSymptoms(on ? symptoms.filter((x) => x !== s) : [...symptoms, s])}
+                  >
+                    {SYMPTOM_LABELS[s]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="field mb12">
+            <label>情况说明</label>
+            <textarea
+              value={interceptNote}
+              onChange={(e) => setInterceptNote(e.target.value)}
+              placeholder="如：到店时咳嗽明显，家长自述昨晚低烧，建议回家休息观察"
+            />
+          </div>
+          <div className="field mb12">
+            <label>医生证明</label>
+            <div className="flex">
+              <button className={`btn btn-sm ${!doctorNote ? '' : 'btn-ghost'}`} onClick={() => setDoctorNote(false)}>
+                无
+              </button>
+              <button className={`btn btn-sm ${doctorNote ? 'btn-success' : 'btn-ghost'}`} onClick={() => setDoctorNote(true)}>
+                有医生证明
+              </button>
+            </div>
+          </div>
+
+          {/* 课时处理实时判定 */}
+          <div className={`alert ${refundEval.decision === 'refund' ? 'a-success' : 'a-warning'}`} style={{ marginBottom: 0 }}>
+            <div className="strong mb8">
+              课时处理预判：{refundEval.decision === 'refund' ? '✔ 返还课时' : '✘ 不返还，正常消耗 1 课时'}
+            </div>
+            <div>· {refundEval.reason}</div>
+            <div className="muted small mt8">
+              判定依据：课包「{interceptStudent.pkg.name}」免费额度 {refundEval.quota} 次/月 · 本月已用 {refundEval.usedThisMonth} 次（请假+已返还拦截） · {doctorNote ? '有' : '无'}医生证明
+            </div>
           </div>
         </Modal>
       )}

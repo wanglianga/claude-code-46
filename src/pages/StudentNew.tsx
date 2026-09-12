@@ -29,7 +29,16 @@ export default function StudentNew() {
   const [error, setError] = useState('');
 
   const age = useMemo(() => ageOf(form.birthDate), [form.birthDate]);
-  const rec = useMemo(() => recommendClass(scores, age, store.classes), [scores, age, store.classes]);
+  const rec = useMemo(
+    () =>
+      recommendClass(scores, age, store.classes, {
+        pastInjuries: form.pastInjuries
+          ? form.pastInjuries.split(/[,，、;；]/).map((x) => x.trim()).filter(Boolean)
+          : [],
+        parentExpectation: form.parentExpectation,
+      }),
+    [scores, age, store.classes, form.pastInjuries, form.parentExpectation],
+  );
   const [classId, setClassId] = useState<string>('');
 
   const set = (k: string, v: string | number) => setForm((f) => ({ ...f, [k]: v }));

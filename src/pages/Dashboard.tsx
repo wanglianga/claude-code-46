@@ -27,6 +27,7 @@ export default function Dashboard() {
   const openIncidents = store.incidents.filter((i) => i.status !== 'closed');
   const waitingParent = store.incidents.filter((i) => i.status === 'waitingParent');
   const injuries = store.incidents.filter((i) => i.type === 'injury' || i.type === 'compensation');
+  const todayInterceptions = store.interceptions.filter((i) => i.date === todayStr);
 
   const mySessions =
     user.role === 'coach' ? todaySessions.filter((s) => s.coachId === user.id) : todaySessions;
@@ -38,13 +39,14 @@ export default function Dashboard() {
         {user.title}，今天是 {todayStr}。围绕每一节课完成「核验 → 记录 → 事件 → 报告」闭环。
       </div>
 
-      <div className="grid grid-4 mb16">
+      <div className="grid mb16" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <Stat num={todaySessions.length} label="今日课次" color="primary" />
         <Stat
-          num={todaySessions.reduce((acc, s) => acc + s.records.filter((r) => r.checklist.signed && !r.leave).length, 0)}
+          num={todaySessions.reduce((acc, s) => acc + s.records.filter((r) => r.checklist.signed && !r.leave && !r.intercepted).length, 0)}
           label="今日已签到学员"
           color="success"
         />
+        <Stat num={todayInterceptions.length} label="今日课前拦截" color="danger" />
         <Stat num={openIncidents.length} label="未闭环事件" color="warning" />
         <Stat num={injuries.length} label="伤情/代偿记录" color="danger" />
       </div>
@@ -54,7 +56,8 @@ export default function Dashboard() {
           {mySessions.length === 0 && <Empty text="今天没有课次" icon="🗓️" />}
           {mySessions.map((s) => {
             const cls = store.classes.find((c) => c.id === s.classId);
-            const signed = s.records.filter((r) => r.checklist.signed && !r.leave).length;
+            const signed = s.records.filter((r) => r.checklist.signed && !r.leave && !r.intercepted).length;
+            const intercepted = s.records.filter((r) => r.intercepted).length;
             const incCount = store.incidents.filter((i) => i.sessionId === s.id && i.status !== 'closed').length;
             return (
               <div className="report-card" key={s.id}>
@@ -66,6 +69,7 @@ export default function Dashboard() {
                     </div>
                     <div className="muted small mt8">
                       签到 {signed}/{s.records.length} 人 · 教练 {store.users.find((u) => u.id === s.coachId)?.name}
+                      {intercepted > 0 && <span className="text-danger"> · 拦截 {intercepted} 人</span>}
                       {incCount > 0 && <span className="text-danger"> · {incCount} 个未闭环事件</span>}
                     </div>
                   </div>

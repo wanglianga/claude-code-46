@@ -28,8 +28,9 @@ export default function Sessions() {
       {sessions.map((s) => {
         const cls = store.classes.find((c) => c.id === s.classId);
         const coach = store.users.find((u) => u.id === s.coachId);
-        const signed = s.records.filter((r) => r.checklist.signed && !r.leave).length;
+        const signed = s.records.filter((r) => r.checklist.signed && !r.leave && !r.intercepted).length;
         const leaveCount = s.records.filter((r) => r.leave).length;
+        const interceptCount = s.records.filter((r) => r.intercepted).length;
         const incs = store.incidents.filter((i) => i.sessionId === s.id);
         const openInc = incs.filter((i) => i.status !== 'closed').length;
         return (
@@ -45,7 +46,8 @@ export default function Sessions() {
                 </div>
                 <div className="muted small mt8">
                   教练 {coach?.name} · 签到 {signed}/{s.records.length} 人
-                  {leaveCount > 0 && ` · 请假 ${leaveCount} 人`} · 事件 {incs.length} 件
+                  {leaveCount > 0 && ` · 请假 ${leaveCount} 人`}
+                  {interceptCount > 0 && ` · 拦截 ${interceptCount} 人`} · 事件 {incs.length} 件
                 </div>
               </div>
               <Link to={`/sessions/${s.id}`} className="btn btn-sm btn-outline">
