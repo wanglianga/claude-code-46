@@ -506,8 +506,8 @@ export const useStore = create<StoreState>()(
       },
     }),
     {
-      name: 'kidfit-store-v2',
-      version: 2,
+      name: 'kidfit-store-v3',
+      version: 3,
     },
   ),
 );

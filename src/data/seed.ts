@@ -29,6 +29,16 @@ function thisWeek(n: number): string {
   return daysAgo(Math.min(n, dow));
 }
 
+/** 下周的日期（offset 0 = 下周一，7 = 下下周一，依此类推） */
+function nextWeekDay(offset: number): string {
+  const d = new Date();
+  const dow = (d.getDay() + 6) % 7; // 周一 = 0
+  d.setDate(d.getDate() - dow + 7 + offset);
+  const m = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 export function buildSeed(): SeedData {
   // ---------- 用户 ----------
   const users: User[] = [
@@ -205,6 +215,12 @@ export function buildSeed(): SeedData {
     ...over,
   });
 
+  /** 未来课次的空白名册（尚未核验，四项均为 false） */
+  const mkBlank = (studentId: string) =>
+    mkRecord(studentId, {
+      checklist: { signed: false, equipment: false, healthOk: false, parentAuth: false },
+    });
+
   const sessions: Session[] = [
     // 已完成的课次（启蒙 A）
     {
@@ -329,6 +345,24 @@ export function buildSeed(): SeedData {
         mkRecord('s-zhouzimo', { checklist: { signed: false, equipment: false, healthOk: false, parentAuth: false } }),
         mkRecord('s-hemuyang', { checklist: { signed: false, equipment: false, healthOk: false, parentAuth: false } }),
       ],
+    },
+    // 下周课次（不得计入本周训练负荷；调班后名册会同步进来）
+    {
+      id: 'se-next-qm', classId: 'c-qimeng', date: nextWeekDay(0), time: '10:00', coachId: 'u-coach', status: 'pending',
+      records: [mkBlank('s-chenchen'), mkBlank('s-suntiantian'), mkBlank('s-wutiantian')],
+    },
+    {
+      id: 'se-next-jc', classId: 'c-jichu', date: nextWeekDay(0), time: '15:00', coachId: 'u-coach', status: 'pending',
+      records: [mkBlank('s-zhaoxiaohu'), mkBlank('s-linyinuo'), mkBlank('s-zhenghao')],
+    },
+    {
+      id: 'se-next-jj', classId: 'c-jinjie', date: nextWeekDay(2), time: '16:30', coachId: 'u-coach2', status: 'pending',
+      records: [mkBlank('s-zhouzimo'), mkBlank('s-hemuyang')],
+    },
+    // 下下周一课次（更远未来排课，同样不得计入本周）
+    {
+      id: 'se-w21-jc', classId: 'c-jichu', date: nextWeekDay(7), time: '15:00', coachId: 'u-coach', status: 'pending',
+      records: [mkBlank('s-zhaoxiaohu'), mkBlank('s-linyinuo'), mkBlank('s-zhenghao')],
     },
   ];
 

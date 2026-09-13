@@ -6,6 +6,9 @@ target/
 coverage/
 .cache/
 .vite/
+.pytest_cache/
+__pycache__/
+.coverage
 *.tsbuildinfo
 
 # Environment, secrets, and local connection data
@@ -14,7 +17,9 @@ coverage/
 *.key
 *.pem
 *.crt
+*.cer
 *.p12
+*.pfx
 *.secret
 *.token
 *.credential
@@ -34,10 +39,12 @@ temp/
 # Memory and skill material
 memory/
 **/memory/
+*memory*
 skill/
 skills/
 **/skill/
 **/skills/
+*skill*
 
 # Claude Code local state, traces, and QA artifacts
 .claude/

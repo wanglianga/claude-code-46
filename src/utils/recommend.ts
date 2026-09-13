@@ -253,6 +253,16 @@ export function weekStart(): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
+/** 本周日（自然周末）的日期字符串 */
+export function weekEnd(): string {
+  const d = new Date();
+  const dow = (d.getDay() + 6) % 7; // 周一 = 0
+  d.setDate(d.getDate() - dow + 6);
+  const m = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 export interface WeekLoad {
   planned: number; // 本周计划课次（本班本周课次数）
   attended: number; // 已完成出勤
@@ -264,13 +274,16 @@ export interface WeekLoad {
 
 /**
  * 计算某孩子本周训练负荷。
- * 按「课次名册中是否包含该孩子」过滤（与当前所在班级无关），
- * 因此调班后：旧班本周已上/被拦截的课次仍计入，新班后续课次继续累计。
+ *  - 按「课次名册中是否包含该孩子」过滤（与当前所在班级无关），
+ *    调班后旧班本周已上/被拦截的课次仍计入，新班后续课次继续累计；
+ *  - 严格限定在同一自然周 [本周一, 本周日]：
+ *    下周及以后的未来排课（如调班同步进来的新班下周课次）不计入本周。
  */
 export function weekLoad(studentId: string, sessions: Session[]): WeekLoad {
   const start = weekStart();
+  const end = weekEnd();
   const weekSessions = sessions.filter(
-    (s) => s.date >= start && s.records.some((r) => r.studentId === studentId),
+    (s) => s.date >= start && s.date <= end && s.records.some((r) => r.studentId === studentId),
   );
   let attended = 0;
   let intercepted = 0;
