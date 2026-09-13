@@ -262,14 +262,16 @@ export interface WeekLoad {
   hint: string;
 }
 
-/** 计算某孩子本周训练负荷（课前拦截会直接拉低负荷） */
-export function weekLoad(
-  studentId: string,
-  classId: string | null,
-  sessions: Session[],
-): WeekLoad {
+/**
+ * 计算某孩子本周训练负荷。
+ * 按「课次名册中是否包含该孩子」过滤（与当前所在班级无关），
+ * 因此调班后：旧班本周已上/被拦截的课次仍计入，新班后续课次继续累计。
+ */
+export function weekLoad(studentId: string, sessions: Session[]): WeekLoad {
   const start = weekStart();
-  const weekSessions = sessions.filter((s) => s.classId === classId && s.date >= start);
+  const weekSessions = sessions.filter(
+    (s) => s.date >= start && s.records.some((r) => r.studentId === studentId),
+  );
   let attended = 0;
   let intercepted = 0;
   let leave = 0;

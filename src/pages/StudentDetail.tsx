@@ -56,7 +56,7 @@ export default function StudentDetail() {
         parentExpectation: student.parentExpectation,
       })
     : null;
-  const load = weekLoad(student.id, student.classId, store.sessions);
+  const load = weekLoad(student.id, store.sessions);
   const interceptions = store.interceptions.filter((i) => i.studentId === student.id);
   const assignHistory = store.timeline
     .filter((t) => t.studentId === student.id && t.kind === 'assign')

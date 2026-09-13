@@ -112,6 +112,33 @@ interface StoreState {
 
 const seed = buildSeed();
 
+/** 新课次名册空记录 */
+function emptyRecord(studentId: string): StudentSessionRecord {
+  return {
+    studentId,
+    checklist: { signed: false, equipment: false, healthOk: false, parentAuth: false },
+    performance: {},
+    performanceNote: '',
+    caution: '',
+    homeExercise: '',
+    levelUpAdvice: '继续保持',
+    reportAcked: false,
+  };
+}
+
+/** 名册是否为空（未签到/未拦截/未请假/无评分）——空白名册调班时可移除，有事实记录的保留 */
+function isBlankRecord(r: StudentSessionRecord): boolean {
+  return (
+    !r.checklist.signed &&
+    !r.checklist.equipment &&
+    !r.checklist.healthOk &&
+    !r.checklist.parentAuth &&
+    !r.leave &&
+    !r.intercepted &&
+    Object.keys(r.performance).length === 0
+  );
+}
+
 export const useStore = create<StoreState>()(
   persist(
     (set, get) => ({
@@ -197,11 +224,29 @@ export const useStore = create<StoreState>()(
       },
 
       assignClass: (studentId, classId, reason) => {
-        const cls = get().classes.find((c) => c.id === classId);
-        set((s) => ({
-          students: s.students.map((st) => (st.id === studentId ? { ...st, classId } : st)),
+        const s = get();
+        const cls = s.classes.find((c) => c.id === classId);
+        const student = s.students.find((x) => x.id === studentId);
+        const prevClassId = student?.classId ?? null;
+        const prevName = prevClassId ? s.classes.find((c) => c.id === prevClassId)?.name : null;
+        set((st) => ({
+          students: st.students.map((x) => (x.id === studentId ? { ...x, classId } : x)),
+          // 同步课次名册：加入新班未开课课次；旧班未开课课次仅移除空白名册，
+          // 已有签到/拦截/请假/评分的记录保留为本周事实（负荷与证据不丢失）
+          sessions: st.sessions.map((se) => {
+            if (se.status === 'done' || se.status === 'ongoing') return se;
+            const record = se.records.find((r) => r.studentId === studentId);
+            if (se.classId === classId && !record) {
+              return { ...se, records: [...se.records, emptyRecord(studentId)] };
+            }
+            if (se.classId !== classId && record && isBlankRecord(record)) {
+              return { ...se, records: se.records.filter((r) => r.studentId !== studentId) };
+            }
+            return se;
+          }),
         }));
-        get().pushTimeline(studentId, 'assign', `分班：${cls?.name ?? classId}`, reason);
+        const title = prevClassId && prevClassId !== classId ? `调班：${prevName ?? '未分班'} → ${cls?.name ?? classId}` : `分班：${cls?.name ?? classId}`;
+        get().pushTimeline(studentId, 'assign', title, reason);
       },
 
       setSessionStatus: (sessionId, status) =>
