@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import IncidentCard from '../components/IncidentCard';
+import InjuryCard from '../components/InjuryCard';
 import AbilityRadar from '../components/Radar';
 import { Avatar, Badge, Card, Empty, Stat } from '../components/ui';
 import { latestAssessment, useCurrentUser, useStore } from '../store/useStore';
@@ -47,6 +48,10 @@ export default function ParentHome() {
 
   const incidents = store.incidents.filter((i) => i.studentId === student.id);
   const openIncidents = incidents.filter((i) => i.status !== 'closed');
+  const injuryRecords = store.injuryRecords
+    .filter((i) => i.studentId === student.id)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const pendingInjuries = injuryRecords.filter((i) => i.status === 'waitingParent');
   const timeline = store.timeline
     .filter((t) => t.studentId === student.id)
     .sort((a, b) => (a.date < b.date ? 1 : -1))
@@ -156,6 +161,23 @@ export default function ParentHome() {
         <Card title={`⚠️ 待您确认的事件（${openIncidents.length}）`}>
           {openIncidents.map((i) => (
             <IncidentCard key={i.id} incident={i} />
+          ))}
+        </Card>
+      )}
+
+      {/* 伤情记录与回访（家长确认后进入训练计划） */}
+      {injuryRecords.length > 0 && (
+        <Card
+          title={`伤情记录与回访（${injuryRecords.length}）`}
+          extra={pendingInjuries.length > 0 && <Badge color="warning">{pendingInjuries.length} 条待您确认</Badge>}
+        >
+          {pendingInjuries.length > 0 && (
+            <div className="alert a-warning">
+              以下伤情记录包含动作、场地、护具、照片/视频、现场处理与复课建议，**您确认后才会进入后续训练计划**。
+            </div>
+          )}
+          {injuryRecords.map((ir) => (
+            <InjuryCard key={ir.id} record={ir} />
           ))}
         </Card>
       )}

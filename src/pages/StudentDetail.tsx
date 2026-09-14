@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import IncidentCard from '../components/IncidentCard';
+import InjuryCard from '../components/InjuryCard';
+import InjuryRefList from '../components/InjuryRefList';
 import AbilityRadar from '../components/Radar';
 import ScoreSliders from '../components/ScoreSliders';
 import { Avatar, Badge, Card, Empty, Modal, Tabs } from '../components/ui';
@@ -58,6 +60,7 @@ export default function StudentDetail() {
     : null;
   const load = weekLoad(student.id, store.sessions);
   const interceptions = store.interceptions.filter((i) => i.studentId === student.id);
+  const injuryRecords = store.injuryRecords.filter((i) => i.studentId === student.id);
   const assignHistory = store.timeline
     .filter((t) => t.studentId === student.id && t.kind === 'assign')
     .sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -116,7 +119,7 @@ export default function StudentDetail() {
           { key: 'overview', label: '档案总览' },
           { key: 'timeline', label: `成长时间线（${timeline.length}）` },
           { key: 'reports', label: `课后报告（${reports.length}）` },
-          { key: 'incidents', label: `伤情与事件（${incidents.length + interceptions.length}）` },
+          { key: 'incidents', label: `伤情与事件（${incidents.length + interceptions.length + injuryRecords.length}）` },
         ]}
       />
 
@@ -329,6 +332,13 @@ export default function StudentDetail() {
 
       {tab === 'incidents' && (
         <div>
+          {injuryRecords.length > 0 && (
+            <Card title={`伤情分级记录（${injuryRecords.length}）`}>
+              {injuryRecords.map((ir) => (
+                <InjuryCard key={ir.id} record={ir} />
+              ))}
+            </Card>
+          )}
           {interceptions.length > 0 && (
             <Card title={`课前拦截记录（${interceptions.length}）`}>
               {interceptions.map((i) => {
@@ -352,7 +362,7 @@ export default function StudentDetail() {
               })}
             </Card>
           )}
-          {incidents.length === 0 && interceptions.length === 0 && <Empty text="无伤情/事件记录" icon="✅" />}
+          {incidents.length === 0 && interceptions.length === 0 && injuryRecords.length === 0 && <Empty text="无伤情/事件记录" icon="✅" />}
           {incidents.map((i) => (
             <IncidentCard key={i.id} incident={i} showSession />
           ))}
@@ -502,10 +512,11 @@ export default function StudentDetail() {
             </>
           }
         >
-          <div className="field">
+          <div className="field mb12">
             <label>评估依据</label>
             <textarea value={levelUpReason} onChange={(e) => setLevelUpReason(e.target.value)} placeholder="体测数据、课堂表现、安全考量…" />
           </div>
+          <InjuryRefList studentId={student.id} />
         </Modal>
       )}
 

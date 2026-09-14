@@ -4,6 +4,7 @@ import {
   DesignDecision,
   Incident,
   Interception,
+  InjuryRecord,
   Session,
   Student,
   TimelineEvent,
@@ -18,6 +19,7 @@ export interface SeedData {
   sessions: Session[];
   incidents: Incident[];
   interceptions: Interception[];
+  injuryRecords: InjuryRecord[];
   assessments: Assessment[];
   timeline: TimelineEvent[];
   designDecisions: DesignDecision[];
@@ -434,6 +436,17 @@ export function buildSeed(): SeedData {
       ],
       designAction: '换器械',
     },
+    {
+      id: 'i-7', sessionId: 'se-jj-1', studentId: 's-hemuyang', type: 'injury',
+      item: 'jump', severity: '中',
+      description: '栏架连续跳跃后单脚落地时左踝扭伤，孩子自述疼痛 3/10，可行走但不敢发力（半年前同部位有扭伤史）。',
+      status: 'waitingParent', createdAt: `${thisWeek(3)} 17:10`, createdBy: '刘洋',
+      injury: { bodyPart: '左踝', treatment: '停止训练，冰敷 15 分钟，弹性绷带固定，坐姿观察 20 分钟' },
+      timeline: [
+        { id: uid('h'), time: `${thisWeek(3)} 17:12`, role: 'coach', userName: '刘洋', action: '现场冰敷固定，录制落地慢放视频，填写伤情分级记录（较重伤）。' },
+        { id: uid('h'), time: `${thisWeek(3)} 17:40`, role: 'frontdesk', userName: '李婷', action: '已联系家长说明情况，伤情记录与暂停训练建议已推送家长端，等待确认。' },
+      ],
+    },
   ];
 
   // ---------- 课前拦截 ----------
@@ -445,6 +458,39 @@ export function buildSeed(): SeedData {
       hasDoctorNote: false, decision: 'refund',
       decisionReason: '本月第 1 次请假/拦截，在课包免费额度（1 次/月）内，返还课时',
       createdBy: '李婷', createdAt: `${thisWeek(4)} 09:50`, parentAcked: true,
+    },
+  ];
+
+  // ---------- 伤情分级记录 ----------
+  const injuryRecords: InjuryRecord[] = [
+    {
+      id: 'ir-1', incidentId: 'i-6', sessionId: 'se-qm-1', studentId: 's-wutiantian',
+      date: daysAgo(7), grade: 'minor', item: 'crawl',
+      movementDetail: '爬行接力转弯时手掌按到地垫接缝',
+      venue: '爬行地垫区', protectiveGear: ['无'],
+      photos: ['右手掌_擦红_1.jpg'], video: '爬行接力_课堂回放.mp4',
+      bodyPart: '右手掌',
+      treatment: '清水清洁，冷敷 5 分钟，无破皮无需包扎',
+      returnAdvice: '不影响后续训练，地垫接缝已修复，下次课正常参加',
+      avoidItems: [], suspension: false, suspensionDays: 0, alternativeItems: [],
+      status: 'closed', parentConfirmedAt: `${daysAgo(7)} 12:05`,
+      managerVisit: { note: '地垫已更换并电话回访，家长无异议。', by: '张敏', date: daysAgo(6) },
+      createdBy: '王浩', createdAt: `${daysAgo(7)} 10:55`,
+    },
+    {
+      id: 'ir-2', incidentId: 'i-7', sessionId: 'se-jj-1', studentId: 's-hemuyang',
+      date: thisWeek(3), grade: 'major', item: 'jump',
+      movementDetail: '栏架连续跳跃后单脚落地',
+      venue: '跳跃垫区', protectiveGear: ['护踝'],
+      photos: ['左踝外侧_红肿_1.jpg'], video: '跳跃落地_慢放回放.mp4',
+      bodyPart: '左踝',
+      treatment: '冰敷 15 分钟，弹性绷带固定，坐姿休息观察 20 分钟',
+      returnAdvice: '建议 7 天内避免跑跳冲击，复查无恙后从低强度跳跃逐步恢复',
+      avoidItems: ['jump', 'balanceBeam'],
+      suspension: true, suspensionDays: 7,
+      alternativeItems: ['throw', 'warmup'],
+      status: 'waitingParent',
+      createdBy: '刘洋', createdAt: `${thisWeek(3)} 17:15`,
     },
   ];
 
@@ -509,6 +555,7 @@ export function buildSeed(): SeedData {
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(55), kind: 'assessment', title: '首次体测', detail: '均分 2.5，规则意识弱。' },
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(55), kind: 'assign', title: '分班：启蒙 A 班', detail: '依据体测推荐入班。' },
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(7), kind: 'incident', title: '摔倒擦伤 · 爬行', detail: '右手掌擦红（地垫接缝），清洁冷敷，家长已确认。' },
+    { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(7), kind: 'injuryCare', title: '伤情记录 · 家长已确认', detail: '轻微伤 · 爬行：右手掌擦红，不影响后续训练；店长已回访闭环。' },
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(7), kind: 'session', title: '课次表现 · 启蒙 A', detail: '体能充沛；团队游戏规则意识待加强。' },
     { id: uid('t'), studentId: 's-wutiantian', date: daysAgo(7), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 4 课时，课包即将到期。' },
     { id: uid('t'), studentId: 's-wutiantian', date: thisWeek(4), kind: 'session', title: '课次表现 · 启蒙 A', detail: '团队游戏能等待轮流，规则意识有进步。' },
@@ -526,9 +573,11 @@ export function buildSeed(): SeedData {
     { id: uid('t'), studentId: 's-hemuyang', date: daysAgo(260), kind: 'enroll', title: '建立学员档案', detail: '跆拳道黄带；左踝扭伤史；青霉素过敏。' },
     { id: uid('t'), studentId: 's-hemuyang', date: daysAgo(250), kind: 'assessment', title: '首次体测', detail: '均分 3.5，力量好，左踝需保护。' },
     { id: uid('t'), studentId: 's-hemuyang', date: daysAgo(250), kind: 'assign', title: '分班：进阶 C 班', detail: '依据体测推荐入班。' },
+    { id: uid('t'), studentId: 's-hemuyang', date: thisWeek(3), kind: 'incident', title: '摔倒扭伤 · 跳跃', detail: '左踝扭伤，冰敷固定；较重伤，建议暂停训练 7 天。' },
+    { id: uid('t'), studentId: 's-hemuyang', date: thisWeek(3), kind: 'injuryCare', title: '伤情记录待家长确认', detail: '较重伤 · 跳跃：暂停训练 7 天，期间替代动作：投掷、热身；下节课避开跳跃、平衡木。' },
     { id: uid('t'), studentId: 's-hemuyang', date: thisWeek(3), kind: 'session', title: '课次表现 · 进阶 C', detail: '投掷优秀；跳跃 2 组后左踝不适，已减量。' },
     { id: uid('t'), studentId: 's-hemuyang', date: thisWeek(3), kind: 'package', title: '课包消耗 1 课时', detail: '剩余 41 课时。' },
   ];
 
-  return { users, students, classes, sessions, incidents, interceptions, assessments, timeline, designDecisions };
+  return { users, students, classes, sessions, incidents, interceptions, injuryRecords, assessments, timeline, designDecisions };
 }

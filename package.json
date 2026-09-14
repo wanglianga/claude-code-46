@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
-    "verify": "tsx scripts/verify-load.ts"
+    "verify": "tsx scripts/verify-load.ts && tsx scripts/verify-injury.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

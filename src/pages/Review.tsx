@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import InjuryCard from '../components/InjuryCard';
 import { Badge, Card, Empty, Stat } from '../components/ui';
 import { useStore } from '../store/useStore';
 import {
@@ -70,6 +71,12 @@ export default function Review() {
   const openCount = filtered.filter((i) => i.status !== 'closed').length;
   const highCount = filtered.filter((i) => i.severity === '高' || i.severity === '中').length;
 
+  // 伤情回访：较重伤待回访 / 待家长确认 / 回访中
+  const majorInjuries = store.injuryRecords.filter((r) => r.grade === 'major');
+  const pendingVisit = majorInjuries.filter((r) => r.status === 'confirmed');
+  const waitingParentConfirm = store.injuryRecords.filter((r) => r.status === 'waitingParent');
+  const inFollowup = majorInjuries.filter((r) => r.status === 'followup');
+
   return (
     <div>
       <h1 className="page-title">伤情复盘</h1>
@@ -108,12 +115,33 @@ export default function Review() {
         </div>
       </Card>
 
-      <div className="grid grid-4 mb16">
+      <div className="grid mb16" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         <Stat num={filtered.length} label="伤情/代偿/恐惧事件" color="primary" />
         <Stat num={highCount} label="中高风险" color="danger" />
         <Stat num={openCount} label="未闭环" color="warning" />
+        <Stat num={pendingVisit.length} label="较重伤待回访" color="danger" />
         <Stat num={store.designDecisions.length} label="训练设计调整" color="success" />
       </div>
+
+      {/* 伤情回访（较重伤） */}
+      {(pendingVisit.length > 0 || waitingParentConfirm.length > 0 || inFollowup.length > 0) && (
+        <Card title="伤情回访（较重伤）">
+          {waitingParentConfirm.length > 0 && (
+            <div className="alert a-warning">
+              {waitingParentConfirm.length} 条伤情记录待家长确认（确认后才进入训练计划）：
+              {waitingParentConfirm.map((r) => store.students.find((x) => x.id === r.studentId)?.name).join('、')}
+            </div>
+          )}
+          {pendingVisit.length > 0 && (
+            <div className="alert a-danger">
+              {pendingVisit.length} 条较重伤已由家长确认，请店长尽快回访并给出复课安排。
+            </div>
+          )}
+          {[...pendingVisit, ...inFollowup, ...waitingParentConfirm.filter((r) => r.grade === 'major')].map((r) => (
+            <InjuryCard key={r.id} record={r} />
+          ))}
+        </Card>
+      )}
 
       <div className="grid grid-2">
         <Card title="各动作项目事件分布">

@@ -5,6 +5,7 @@ import {
   DIMENSIONS,
   Dimension,
   Interception,
+  InjuryRecord,
   MovementItem,
   Recommendation,
   Scores,
@@ -127,6 +128,28 @@ export const HOME_EXERCISES: Record<MovementItem, string> = {
   balanceBeam: '地板直线行走 + 单脚站立挑战，每侧 20 秒',
   teamGame: '周末家庭接力小游戏，练习轮流与规则意识',
 };
+
+/** 暂停训练期间的低风险替代动作（按需避开的动作推导） */
+export const LOW_RISK_ALTERNATIVES: Record<MovementItem, { items: MovementItem[]; reason: string }> = {
+  jump: { items: ['throw', 'warmup'], reason: '避免下肢冲击，改上肢与柔韧性训练' },
+  balanceBeam: { items: ['crawl', 'throw'], reason: '避免高处跌落风险，改地面项目' },
+  crawl: { items: ['warmup', 'throw'], reason: '避免手掌/膝盖负重' },
+  throw: { items: ['balanceBeam', 'warmup'], reason: '避免肩臂发力，改低强度协调训练' },
+  warmup: { items: ['teamGame'], reason: '以静态拉伸替代动态热身' },
+  teamGame: { items: ['warmup', 'throw'], reason: '避免对抗性接触，改个人低强度项目' },
+};
+
+/** 根据需避开的动作计算低风险替代动作（去重、排除被避开项） */
+export function computeAlternatives(avoidItems: MovementItem[]): MovementItem[] {
+  const set = new Set<MovementItem>();
+  for (const item of avoidItems) {
+    for (const alt of LOW_RISK_ALTERNATIVES[item].items) {
+      if (!avoidItems.includes(alt)) set.add(alt);
+    }
+  }
+  const result = [...set];
+  return result.length > 0 ? result : ['warmup', 'throw'];
+}
 
 /** 根据既往伤情生成给家长的风险提示 */
 export function riskHints(
@@ -305,4 +328,28 @@ export function weekLoad(studentId: string, sessions: Session[]): WeekLoad {
   else if (percent >= 100) hint = '本周计划课次已全部完成，负荷饱满';
   else hint = `本周已完成 ${attended}/${planned} 节`;
   return { planned, attended, intercepted, leave, percent, hint };
+}
+
+// ===================== 伤情分级回访 =====================
+
+/** 暂停训练截止日期（无暂停建议时返回 null） */
+export function suspensionEnd(rec: InjuryRecord): string | null {
+  if (!rec.suspension || rec.suspensionDays <= 0) return null;
+  const d = new Date(rec.date);
+  d.setDate(d.getDate() + rec.suspensionDays);
+  const m = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** 伤情是否处于「已进入训练计划」的生效期（家长确认后，闭环前） */
+export function isInjuryActive(rec: InjuryRecord): boolean {
+  return rec.status === 'confirmed' || rec.status === 'followup';
+}
+
+/** 某孩子当前生效的伤情提醒（用于教练下节课避开相关动作） */
+export function activeInjuries(injuryRecords: InjuryRecord[], studentId: string): InjuryRecord[] {
+  return injuryRecords.filter(
+    (r) => r.studentId === studentId && isInjuryActive(r) && (r.avoidItems.length > 0 || r.suspension),
+  );
 }

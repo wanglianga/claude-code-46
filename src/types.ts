@@ -192,6 +192,52 @@ export interface Session {
   records: StudentSessionRecord[];
 }
 
+// ===================== 伤情分级回访 =====================
+
+export type InjuryGrade = 'minor' | 'major';
+
+export const INJURY_GRADE_LABELS: Record<InjuryGrade, string> = {
+  minor: '轻微伤',
+  major: '较重伤',
+};
+
+export type InjuryStatus = 'waitingParent' | 'confirmed' | 'followup' | 'closed';
+
+export const INJURY_STATUS_LABELS: Record<InjuryStatus, string> = {
+  waitingParent: '待家长确认',
+  confirmed: '已确认·进入训练计划',
+  followup: '店长回访中',
+  closed: '已闭环',
+};
+
+/** 伤情分级记录：摔倒后由教练填写，家长确认后进入后续训练计划 */
+export interface InjuryRecord {
+  id: string;
+  incidentId?: string; // 关联课堂事件
+  sessionId: string;
+  studentId: string;
+  date: string;
+  grade: InjuryGrade; // 轻微伤 → 下节课提醒；较重伤 → 店长回访 + 暂停训练建议
+  item?: MovementItem; // 关联动作项目
+  movementDetail: string; // 具体动作描述
+  venue: string; // 场地（如 平衡木区/跳跃垫区）
+  protectiveGear: string[]; // 护具佩戴
+  photos: string[]; // 伤情照片（演示环境存文件名）
+  video: string; // 动作视频（演示环境存文件名）
+  bodyPart: string; // 受伤部位
+  treatment: string; // 现场处理
+  returnAdvice: string; // 复课建议
+  avoidItems: MovementItem[]; // 下节课需避开的动作
+  suspension: boolean; // 是否建议暂停训练
+  suspensionDays: number; // 建议暂停天数
+  alternativeItems: MovementItem[]; // 暂停期间低风险替代动作
+  status: InjuryStatus;
+  parentConfirmedAt?: string; // 家长确认时间（确认后才进入训练计划）
+  managerVisit?: { note: string; by: string; date: string }; // 店长回访
+  createdBy: string;
+  createdAt: string;
+}
+
 // ===================== 事件（围绕一节课的异常/诉求） =====================
 
 export type IncidentType =
@@ -254,6 +300,7 @@ export type TimelineKind =
   | 'assign' // 分班
   | 'session' // 课次表现
   | 'incident' // 伤情/事件
+  | 'injuryCare' // 伤情回访
   | 'interception' // 课前拦截
   | 'leave' // 请假
   | 'makeup' // 补课
@@ -267,6 +314,7 @@ export const TIMELINE_KIND_LABELS: Record<TimelineKind, string> = {
   assign: '分班',
   session: '课次表现',
   incident: '伤情/事件',
+  injuryCare: '伤情回访',
   interception: '课前拦截',
   leave: '请假',
   makeup: '补课',

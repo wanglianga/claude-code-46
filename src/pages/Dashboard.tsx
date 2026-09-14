@@ -113,17 +113,38 @@ export default function Dashboard() {
       </div>
 
       {user.role === 'manager' && (
-        <Card title="待家长确认">
-          {waitingParent.length === 0 && <Empty text="暂无待家长确认的事件" icon="📞" />}
+        <Card title="待办：家长确认与伤情回访">
+          {waitingParent.length === 0 && store.injuryRecords.filter((r) => r.status === 'waitingParent' || r.status === 'confirmed').length === 0 && (
+            <Empty text="暂无待办" icon="📞" />
+          )}
           {waitingParent.map((i) => {
             const st = store.students.find((x) => x.id === i.studentId);
             return (
               <div className="mb8" key={i.id}>
-                <span className="strong">{st?.name}</span> · {INCIDENT_LABELS[i.type]}
-                <span className="muted small">（{i.createdAt}）</span>
+                <Badge color="info">事件</Badge> <span className="strong">{st?.name}</span> · {INCIDENT_LABELS[i.type]}
+                <span className="muted small">（{i.createdAt}，待家长确认）</span>
               </div>
             );
           })}
+          {store.injuryRecords
+            .filter((r) => r.status === 'waitingParent' || r.status === 'confirmed')
+            .map((r) => {
+              const st = store.students.find((x) => x.id === r.studentId);
+              return (
+                <div className="mb8" key={r.id}>
+                  <Badge color={r.grade === 'major' ? 'danger' : 'warning'}>{r.grade === 'major' ? '较重伤' : '轻微伤'}</Badge>{' '}
+                  <span className="strong">{st?.name}</span> · {r.bodyPart}
+                  <span className="muted small">
+                    （{r.date}，{r.status === 'waitingParent' ? '伤情记录待家长确认' : '家长已确认，待店长回访'}）
+                  </span>
+                </div>
+              );
+            })}
+          <div className="mt12">
+            <Link to="/review" className="btn btn-sm btn-outline">
+              🔍 前往伤情复盘与回访
+            </Link>
+          </div>
         </Card>
       )}
     </div>

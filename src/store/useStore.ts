@@ -12,8 +12,13 @@ import {
   Incident,
   IncidentStatus,
   IncidentType,
+  INJURY_GRADE_LABELS,
+  INJURY_STATUS_LABELS,
   Interception,
+  InjuryGrade,
+  InjuryRecord,
   LevelUpAssessment,
+  MOVEMENT_LABELS,
   MovementItem,
   Rating,
   Role,
@@ -27,7 +32,7 @@ import {
   TimelineKind,
   User,
 } from '../types';
-import { countMonthlyFreebies, evaluateRefund, nowTime, today, uid } from '../utils/recommend';
+import { computeAlternatives, countMonthlyFreebies, evaluateRefund, nowTime, today, uid } from '../utils/recommend';
 
 export interface NewStudentInput {
   name: string;
@@ -51,6 +56,7 @@ interface StoreState {
   sessions: Session[];
   incidents: Incident[];
   interceptions: Interception[];
+  injuryRecords: InjuryRecord[];
   assessments: Assessment[];
   timeline: TimelineEvent[];
   designDecisions: DesignDecision[];
@@ -102,6 +108,29 @@ interface StoreState {
     hasDoctorNote: boolean;
   }) => string;
   ackInterception: (interceptionId: string) => void;
+
+  // 伤情分级回访
+  addInjuryRecord: (input: {
+    incidentId?: string;
+    sessionId: string;
+    studentId: string;
+    grade: InjuryGrade;
+    item?: MovementItem;
+    movementDetail: string;
+    venue: string;
+    protectiveGear: string[];
+    photos: string[];
+    video: string;
+    bodyPart: string;
+    treatment: string;
+    returnAdvice: string;
+    avoidItems: MovementItem[];
+    suspension: boolean;
+    suspensionDays: number;
+  }) => string;
+  confirmInjury: (recordId: string) => void; // 家长确认 → 进入训练计划
+  addManagerVisit: (recordId: string, note: string) => void; // 店长回访
+  closeInjury: (recordId: string, note?: string) => void; // 闭环
 
   // 请假补课 / 沟通 / 升阶
   addMakeup: (studentId: string, date: string, note: string) => void;
@@ -464,6 +493,71 @@ export const useStore = create<StoreState>()(
           interceptions: s.interceptions.map((i) => (i.id === interceptionId ? { ...i, parentAcked: true } : i)),
         })),
 
+      addInjuryRecord: (input) => {
+        const me = get().users.find((u) => u.id === get().currentUserId);
+        const id = uid('ir');
+        const record: InjuryRecord = {
+          id,
+          date: today(),
+          ...input,
+          // 暂停训练期间自动推荐低风险替代动作
+          alternativeItems: input.suspension ? computeAlternatives(input.avoidItems) : [],
+          status: 'waitingParent',
+          createdBy: me?.name ?? '教练',
+          createdAt: nowTime(),
+        };
+        set((s) => ({ injuryRecords: [record, ...s.injuryRecords] }));
+        const itemText = input.item ? MOVEMENT_LABELS[input.item] : '综合';
+        get().pushTimeline(
+          input.studentId,
+          'injuryCare',
+          `伤情记录 · ${INJURY_GRADE_LABELS[input.grade]}（${itemText}）`,
+          `${input.bodyPart}：${input.treatment}。复课建议：${input.returnAdvice}。已提交家长确认，确认后进入后续训练计划。`,
+        );
+        return id;
+      },
+
+      confirmInjury: (recordId) => {
+        const rec = get().injuryRecords.find((r) => r.id === recordId);
+        if (!rec) return;
+        set((s) => ({
+          injuryRecords: s.injuryRecords.map((r) =>
+            r.id === recordId ? { ...r, status: 'confirmed', parentConfirmedAt: nowTime() } : r,
+          ),
+        }));
+        const avoidText = rec.avoidItems.length > 0 ? `下节课避开：${rec.avoidItems.map((i) => MOVEMENT_LABELS[i]).join('、')}。` : '';
+        const suspendText = rec.suspension ? `暂停训练 ${rec.suspensionDays} 天，期间替代动作：${rec.alternativeItems.map((i) => MOVEMENT_LABELS[i]).join('、')}。` : '';
+        get().pushTimeline(
+          rec.studentId,
+          'injuryCare',
+          '伤情记录 · 家长已确认',
+          `${INJURY_GRADE_LABELS[rec.grade]}已进入后续训练计划。${avoidText}${suspendText}`,
+        );
+      },
+
+      addManagerVisit: (recordId, note) => {
+        const me = get().users.find((u) => u.id === get().currentUserId);
+        const rec = get().injuryRecords.find((r) => r.id === recordId);
+        if (!rec) return;
+        set((s) => ({
+          injuryRecords: s.injuryRecords.map((r) =>
+            r.id === recordId
+              ? { ...r, status: 'followup', managerVisit: { note, by: me?.name ?? '店长', date: today() } }
+              : r,
+          ),
+        }));
+        get().pushTimeline(rec.studentId, 'injuryCare', '店长伤情回访', note);
+      },
+
+      closeInjury: (recordId, note) => {
+        const rec = get().injuryRecords.find((r) => r.id === recordId);
+        if (!rec) return;
+        set((s) => ({
+          injuryRecords: s.injuryRecords.map((r) => (r.id === recordId ? { ...r, status: 'closed' } : r)),
+        }));
+        get().pushTimeline(rec.studentId, 'injuryCare', '伤情回访闭环', note || '恢复良好，伤情记录闭环。');
+      },
+
       addMakeup: (studentId, date, note) => {
         get().pushTimeline(studentId, 'makeup', '补课完成', `${date} ${note}`);
       },
@@ -491,9 +585,20 @@ export const useStore = create<StoreState>()(
             students: st2.students.map((x) => (x.id === studentId ? { ...x, classId: toCls.id } : x)),
           }));
         }
+        // 升阶评估引用伤情记录（最近 3 条）
+        const injuries = s.injuryRecords.filter((ir) => ir.studentId === studentId).slice(0, 3);
+        const injuryRef =
+          injuries.length > 0
+            ? `伤情参考：${injuries
+                .map(
+                  (ir) =>
+                    `${ir.date} ${INJURY_GRADE_LABELS[ir.grade]}·${ir.item ? MOVEMENT_LABELS[ir.item] : '综合'}（${INJURY_STATUS_LABELS[ir.status]}${ir.suspension ? `，曾建议暂停 ${ir.suspensionDays} 天` : ''}）`,
+                )
+                .join('；')}`
+            : '伤情参考：无伤情记录';
         get().pushTimeline(
           studentId, 'levelup', `升阶评估 · ${result}`,
-          `${fromCls?.name ?? '未分班'} → ${result === '通过' ? toCls?.name : '维持原班'}。依据：${reason}（来源：${source}）`,
+          `${fromCls?.name ?? '未分班'} → ${result === '通过' ? toCls?.name : '维持原班'}。依据：${reason}（来源：${source}）。${injuryRef}`,
         );
       },
 
@@ -506,8 +611,8 @@ export const useStore = create<StoreState>()(
       },
     }),
     {
-      name: 'kidfit-store-v3',
-      version: 3,
+      name: 'kidfit-store-v4',
+      version: 4,
     },
   ),
 );

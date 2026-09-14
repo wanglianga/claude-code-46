@@ -7,6 +7,7 @@ import {
   Checklist,
   INCIDENT_LABELS,
   IncidentType,
+  InjuryGrade,
   MOVEMENT_ITEMS,
   MOVEMENT_LABELS,
   MovementItem,
@@ -19,7 +20,7 @@ import {
   SYMPTOMS,
   Symptom,
 } from '../types';
-import { countMonthlyFreebies, evaluateRefund, HOME_EXERCISES } from '../utils/recommend';
+import { activeInjuries, computeAlternatives, countMonthlyFreebies, evaluateRefund, HOME_EXERCISES, suspensionEnd } from '../utils/recommend';
 
 const STATUS_COLOR: Record<string, string> = {
   pending: 'gray',
@@ -65,6 +66,18 @@ export default function SessionDetail() {
   const [interceptNote, setInterceptNote] = useState('');
   const [doctorNote, setDoctorNote] = useState(false);
 
+  // 伤情分级记录表单（事件类型为摔倒擦伤时展开）
+  const [injGrade, setInjGrade] = useState<InjuryGrade>('minor');
+  const [injMovement, setInjMovement] = useState('');
+  const [injVenue, setInjVenue] = useState('平衡木区');
+  const [injGear, setInjGear] = useState<string[]>([]);
+  const [injPhotos, setInjPhotos] = useState('');
+  const [injVideo, setInjVideo] = useState('');
+  const [injReturn, setInjReturn] = useState('');
+  const [injAvoid, setInjAvoid] = useState<MovementItem[]>([]);
+  const [injSuspension, setInjSuspension] = useState(false);
+  const [injDays, setInjDays] = useState(7);
+
   if (!session || !user) return <Empty text="课次不存在" icon="❓" />;
 
   const cls = store.classes.find((c) => c.id === session.classId);
@@ -80,11 +93,22 @@ export default function SessionDetail() {
     setIncDesc('');
     setIncBodyPart('');
     setIncTreatment('');
+    // 重置伤情表单
+    setInjGrade('minor');
+    setInjMovement('');
+    setInjVenue('平衡木区');
+    setInjGear([]);
+    setInjPhotos('');
+    setInjVideo('');
+    setInjReturn('');
+    setInjAvoid([]);
+    setInjSuspension(false);
+    setInjDays(7);
   };
 
   const submitIncident = () => {
     if (!incidentFor || !incDesc.trim()) return;
-    store.addIncident({
+    const incidentId = store.addIncident({
       sessionId: session.id,
       studentId: incidentFor,
       type: incType,
@@ -93,6 +117,27 @@ export default function SessionDetail() {
       description: incDesc.trim(),
       injury: incType === 'injury' && incBodyPart.trim() ? { bodyPart: incBodyPart.trim(), treatment: incTreatment.trim() || '已现场处理' } : undefined,
     });
+    // 摔倒擦伤 → 同步生成伤情分级记录（待家长确认后进入训练计划）
+    if (incType === 'injury') {
+      store.addInjuryRecord({
+        incidentId,
+        sessionId: session.id,
+        studentId: incidentFor,
+        grade: injGrade,
+        item: incItem,
+        movementDetail: injMovement.trim() || incDesc.trim(),
+        venue: injVenue,
+        protectiveGear: injGear.length > 0 ? injGear : ['无'],
+        photos: injPhotos ? injPhotos.split(/[,，、]/).map((x) => x.trim()).filter(Boolean) : [],
+        video: injVideo.trim(),
+        bodyPart: incBodyPart.trim() || '未注明',
+        treatment: incTreatment.trim() || '已现场处理',
+        returnAdvice: injReturn.trim() || '观察 24 小时，无异常后恢复正常训练',
+        avoidItems: injAvoid,
+        suspension: injGrade === 'major' ? injSuspension : false,
+        suspensionDays: injGrade === 'major' && injSuspension ? injDays : 0,
+      });
+    }
     setIncidentFor(null);
   };
 
@@ -326,6 +371,36 @@ export default function SessionDetail() {
               })}
             </div>
           )}
+          {/* 伤情提醒：提示教练本节课避开相关动作（家长确认后生效） */}
+          {(() => {
+            const reminders = session.records
+              .filter((r) => !r.leave && !r.intercepted)
+              .flatMap((r) => activeInjuries(store.injuryRecords, r.studentId));
+            if (reminders.length === 0) return null;
+            return (
+              <div className="alert a-danger">
+                <div className="strong mb8">🩹 伤情提醒（本节课请避开相关动作）</div>
+                {reminders.map((ir) => {
+                  const st = store.students.find((x) => x.id === ir.studentId)!;
+                  const end = suspensionEnd(ir);
+                  return (
+                    <div key={ir.id} className="mb8">
+                      · <span className="strong">{st.name}</span>：
+                      {ir.grade === 'major' ? '较重伤' : '轻微伤'} · {ir.item ? MOVEMENT_LABELS[ir.item] : '综合'}（{ir.date}）
+                      {ir.avoidItems.length > 0 && (
+                        <span className="text-danger"> 避开：{ir.avoidItems.map((i) => MOVEMENT_LABELS[i]).join('、')}</span>
+                      )}
+                      {ir.suspension && (
+                        <span>
+                          {' '}· 暂停训练至 {end}，替代动作：{ir.alternativeItems.map((i) => MOVEMENT_LABELS[i]).join('、')}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
           {session.records.filter((r) => !r.leave && !r.intercepted).map((r) => {
             const st = store.students.find((x) => x.id === r.studentId)!;
             const locked = session.status === 'done' || !canCoach;
@@ -470,16 +545,127 @@ export default function SessionDetail() {
             />
           </div>
           {incType === 'injury' && (
-            <div className="form-row">
-              <div className="field">
-                <label>受伤部位</label>
-                <input value={incBodyPart} onChange={(e) => setIncBodyPart(e.target.value)} placeholder="如：右手掌" />
+            <>
+              <div className="form-row">
+                <div className="field">
+                  <label>伤情分级</label>
+                  <select value={injGrade} onChange={(e) => setInjGrade(e.target.value as InjuryGrade)}>
+                    <option value="minor">轻微伤（下节课提醒避开）</option>
+                    <option value="major">较重伤（店长回访 + 暂停训练建议）</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>场地</label>
+                  <select value={injVenue} onChange={(e) => setInjVenue(e.target.value)}>
+                    {['平衡木区', '跳跃垫区', '爬行地垫区', '投掷区', '热身区', '综合游戏区'].map((v) => (
+                      <option key={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="field">
-                <label>现场处置</label>
-                <input value={incTreatment} onChange={(e) => setIncTreatment(e.target.value)} placeholder="如：清水清洁，冷敷 5 分钟" />
+              <div className="form-row">
+                <div className="field">
+                  <label>具体动作</label>
+                  <input value={injMovement} onChange={(e) => setInjMovement(e.target.value)} placeholder="如：栏架连续跳跃后单脚落地" />
+                </div>
+                <div className="field">
+                  <label>护具佩戴</label>
+                  <div className="flex wrap">
+                    {['头盔', '护膝', '护肘', '护腕', '护踝', '防滑袜'].map((g) => {
+                      const on = injGear.includes(g);
+                      return (
+                        <button
+                          type="button"
+                          key={g}
+                          className={`btn btn-sm ${on ? '' : 'btn-ghost'}`}
+                          onClick={() => setInjGear(on ? injGear.filter((x) => x !== g) : [...injGear, g])}
+                        >
+                          {g}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
+              <div className="form-row">
+                <div className="field">
+                  <label>受伤部位</label>
+                  <input value={incBodyPart} onChange={(e) => setIncBodyPart(e.target.value)} placeholder="如：右手掌" />
+                </div>
+                <div className="field">
+                  <label>现场处理</label>
+                  <input value={incTreatment} onChange={(e) => setIncTreatment(e.target.value)} placeholder="如：清水清洁，冷敷 5 分钟" />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="field">
+                  <label>伤情照片（文件名，逗号分隔）</label>
+                  <input value={injPhotos} onChange={(e) => setInjPhotos(e.target.value)} placeholder="如：左踝_红肿_1.jpg, 左踝_红肿_2.jpg" />
+                </div>
+                <div className="field">
+                  <label>动作视频（文件名）</label>
+                  <input value={injVideo} onChange={(e) => setInjVideo(e.target.value)} placeholder="如：跳跃落地_慢放回放.mp4" />
+                </div>
+              </div>
+              <div className="field mb12">
+                <label>复课建议</label>
+                <textarea value={injReturn} onChange={(e) => setInjReturn(e.target.value)} placeholder="如：建议 7 天内避免跑跳冲击，复查无恙后从低强度逐步恢复" />
+              </div>
+              <div className="field mb12">
+                <label>下节课需避开的动作（伤情回访将提示教练）</label>
+                <div className="flex wrap">
+                  {MOVEMENT_ITEMS.map((m) => {
+                    const on = injAvoid.includes(m);
+                    return (
+                      <button
+                        type="button"
+                        key={m}
+                        className={`btn btn-sm ${on ? 'btn-danger' : 'btn-ghost'}`}
+                        onClick={() => setInjAvoid(on ? injAvoid.filter((x) => x !== m) : [...injAvoid, m])}
+                      >
+                        {MOVEMENT_LABELS[m]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {injGrade === 'major' && (
+                <div className="alert a-warning">
+                  <div className="flex wrap mb8">
+                    <span className="strong">暂停训练建议：</span>
+                    <button type="button" className={`btn btn-sm ${!injSuspension ? '' : 'btn-ghost'}`} onClick={() => setInjSuspension(false)}>
+                      不建议
+                    </button>
+                    <button type="button" className={`btn btn-sm ${injSuspension ? 'btn-warning' : 'btn-ghost'}`} onClick={() => setInjSuspension(true)}>
+                      建议暂停
+                    </button>
+                    {injSuspension && (
+                      <>
+                        <input
+                          type="number"
+                          min={1}
+                          max={30}
+                          style={{ width: 64, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 8 }}
+                          value={injDays}
+                          onChange={(e) => setInjDays(Number(e.target.value))}
+                        />
+                        <span className="muted small">天</span>
+                      </>
+                    )}
+                  </div>
+                  {injSuspension && (
+                    <div className="small">
+                      暂停期间系统推荐低风险替代动作：
+                      <span className="strong"> {computeAlternatives(injAvoid).map((m) => MOVEMENT_LABELS[m]).join('、')}</span>
+                      <span className="muted">（按需避开动作自动推导）</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="alert a-info" style={{ marginBottom: 0 }}>
+                提交后生成伤情分级记录（含动作、场地、护具、照片、视频、现场处理、复课建议），**家长确认后才进入后续训练计划**。
+              </div>
+            </>
           )}
           <div className="alert a-info" style={{ marginBottom: 0 }}>
             登记后事件进入「待处理」，前台将联系家长，店长复盘后闭环；全程记录进入学员成长档案。

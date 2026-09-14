@@ -201,6 +201,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   background: #fff; border: 3px solid var(--primary);
 }
 .tl-item .tl-dot.k-incident { border-color: var(--danger); }
+.tl-item .tl-dot.k-injuryCare { border-color: #ea580c; }
+.tl-item .tl-dot.k-interception { border-color: #f59e0b; }
 .tl-item .tl-dot.k-session { border-color: var(--success); }
 .tl-item .tl-dot.k-package { border-color: var(--warning); }
 .tl-item .tl-dot.k-assessment { border-color: var(--info); }

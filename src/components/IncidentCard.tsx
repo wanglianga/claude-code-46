@@ -8,6 +8,7 @@ import {
   Incident,
   MOVEMENT_LABELS,
 } from '../types';
+import InjuryRefList from './InjuryRefList';
 import { Avatar, Badge, Modal } from './ui';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -209,7 +210,7 @@ export default function IncidentCard(props: { incident: Incident; showSession?: 
             </>
           }
         >
-          <div className="field">
+          <div className="field mb12">
             <label>评估依据（体测、课堂表现、安全考量）</label>
             <textarea
               value={levelUpReason}
@@ -217,8 +218,9 @@ export default function IncidentCard(props: { incident: Incident; showSession?: 
               placeholder="例如：最近复测均分 3.8，平衡与协调已达进阶班要求…"
             />
           </div>
-          <div className="alert a-info" style={{ marginBottom: 0 }}>
-            通过后系统自动调整班级，并在学员成长时间线中记录「升阶评估」。
+          <InjuryRefList studentId={student.id} />
+          <div className="alert a-info mt12" style={{ marginBottom: 0 }}>
+            通过后系统自动调整班级，并在学员成长时间线中记录「升阶评估」（含伤情参考）。
           </div>
         </Modal>
       )}
